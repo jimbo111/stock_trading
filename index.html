@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Guide: Korean Semiconductors Alpha Engine</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>User Guide: Korean Semiconductors Alpha Engine</h1>
+
+    <h2>1. Introduction</h2>
+    <p>Welcome to the Korean Semiconductors Alpha Engine! This project is a comprehensive, production-ready starter kit for building a quantitative trading system. It's designed to predict the 20-day excess returns of major Korean semiconductor stocks, like Samsung and SK hynix, against the KOSPI benchmark.</p>
+    <p>The system uses a combination of Hidden Markov Models (HMM) to identify market regimes (e.g., bull, bear, neutral) and a calibrated Elastic Net classifier to make directional predictions.</p>
+    <p>This guide will walk you through the setup, configuration, and usage of the various components of this system.</p>
+
+    <h2>2. Architecture Overview</h2>
+    <p>The system is designed with a modular and production-friendly architecture. The data flows through the system as follows:</p>
+    <pre><code>Raw Data Sources → ETL Pipeline → Feature Store (Parquet)
+                                       ↓
+                    Labels ← Label Generator (20D ER)
+                       ↓
+           Purged CV Training → HMM + Classifier
+                       ↓
+              Model Artifacts (MLflow)
+                       ↓
+         Daily Scoring → Prediction Store → API
+                       ↓
+              Backtest Engine → Reports</code></pre>
+    <p>Key Principles:</p>
+    <ul>
+        <li>No Lookahead Bias: All features are calculated using data available up to the previous day (t-1).</li>
+        <li>No Label Leakage: The model is trained using Purged K-Fold Cross-Validation to prevent information from the training set leaking into the validation set.</li>
+        <li>Production-Ready: The code is modular, typed, tested, and includes logging.</li>
+        <li>Schema Contracts: All data is validated against predefined JSON schemas to ensure data quality.</li>
+    </ul>
+
+    <h2>3. Quick Start (5-Minute Demo)</h2>
+    <p>This will get you up and running with the sample data included in the project.</p>
+    <pre><code># 1. Navigate to the project directory
+cd stock_trading
+
+# 2. Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# 3. Install the required dependencies
+pip install -r requirements.txt
+
+# 4. Run the unit tests to verify the installation
+pytest -v
+
+# 5. Generate features and labels from the sample data
+python etl/build_features.py --use-samples
+python labeling/make_labels.py --use-samples
+
+# 6. Start the API server
+uvicorn api.main:app --reload --port 8000</code></pre>
+    <p>You now have the API server running at <code>http://localhost:8000</code>. You can explore the API documentation at <code>http://localhost:8000/docs</code>.</p>
+
+    <h2>4. Installation</h2>
+    <p>Follow these steps for a full installation:</p>
+    <ol>
+        <li>Clone the repository:
+            <pre><code>git clone &lt;repository_url&gt;
+cd stock_trading</code></pre>
+        </li>
+        <li>Set up the environment:
+            <pre><code>python -m venv .venv
+source .venv/bin/activate</code></pre>
+        </li>
+        <li>Install dependencies:
+            <pre><code>pip install -r requirements.txt</code></pre>
+        </li>
+        <li>Set up pre-commit hooks (for development):
+            <pre><code>pre-commit install</code></pre>
+        </li>
+        <li>Set the PYTHONPATH:
+            <pre><code>export PYTHONPATH="${PYTHONPATH}:$(pwd)"</code></pre>
+            This is important to ensure that the Python interpreter can find the project's modules.
+        </li>
+    </ol>
+
+    <h2>5. Configuration</h2>
+    <p>All project configurations are managed in the <code>config/default.yaml</code> file. Here are some of the key parameters you can modify:</p>
+    <pre><code>symbols: ["005930.KS", "000660.KS"]  # Stocks to trade
+horizon_days: 20                      # Prediction horizon
+kelly_frac: 0.25                      # Kelly fraction for position sizing
+weight_max: 0.05                      # Maximum position size
+commission_bps: 2                     # Transaction cost in basis points
+embargo_days: 20                      # CV embargo period</code></pre>
+    <p>You can also configure the logging behavior in <code>config/logging.yaml</code>.</p>
+
+    <h2>6. Usage</h2>
+
+    <h3>6.1. Generating Features (ETL)</h3>
+    <p>The ETL (Extract, Transform, Load) pipeline is responsible for ingesting raw data and generating features.</p>
+    <ul>
+        <li>To run with sample data:
+            <pre><code>python etl/build_features.py --use-samples</code></pre>
+        </li>
+        <li>To run with your own data (production):
+            <p>You will first need to implement the data ingestion logic in the <code>etl/ingest_*.py</code> files to connect to your data provider. Then, you can run:</p>
+            <pre><code>python etl/build_features.py --start-date 2020-01-01 --end-date 2025-10-24</code></pre>
+        </li>
+    </ul>
+    <p>The generated features will be stored in <code>data/gold/dt=YYYY-MM-DD/features.parquet</code>.</p>
+
+    <h3>6.2. Generating Labels</h3>
+    <p>This step creates the target variable for the model (20-day forward excess returns).</p>
+    <pre><code>python labeling/make_labels.py --use-samples</code></pre>
+    <p>The labels will be stored in <code>data/gold/dt=YYYY-MM-DD/labels.parquet</code>.</p>
+
+    <h3>6.3. Training the Model</h3>
+    <p>This script runs the full modeling pipeline:</p>
+    <pre><code>python modeling/pipeline.py --train --use-samples</code></pre>
+    <p>The training process involves:</p>
+    <ol>
+        <li>Merging features and labels.</li>
+        <li>Fitting a 3-state Gaussian HMM to detect market regimes.</li>
+        <li>Augmenting the feature set with the HMM state probabilities.</li>
+        <li>Training an Elastic Net classifier using Purged 5-Fold Cross-Validation.</li>
+        <li>Calibrating the model's predictions using Isotonic Regression.</li>
+    </ol>
+    <p>Note: Model persistence (saving the trained model) is not yet implemented. You will need to modify <code>modeling/pipeline.py</code> to save the model artifacts.</p>
+
+    <h3>6.4. Running the Backtest</h3>
+    <p>The backtest engine simulates the trading strategy on historical data.</p>
+    <pre><code># This is a placeholder, as the backtest engine is not fully implemented
+python backtest/engine.py --use-samples --report ./reports/sample</code></pre>
+
+    <h3>6.5. Using the API</h3>
+    <p>The API provides access to the model's predictions.</p>
+    <ul>
+        <li>Start the API server:
+            <pre><code>uvicorn api.main:app --reload --port 8000</code></pre>
+        </li>
+        <li>API Endpoints:
+            <ul>
+                <li><code>GET /v1/health</code>: Health check.</li>
+                <li><code>GET /v1/predict?symbol=005930.KS</code>: Get the latest prediction for a single stock.</li>
+                <li><code>GET /v1/predictions</code>: Get all latest predictions.</li>
+                <li><code>GET /v1/dates</code>: List the dates for which predictions are available.</li>
+            </ul>
+        </li>
+    </ul>
+    <p>You can interact with the API using <code>curl</code> or by visiting the auto-generated documentation at <code>http://localhost:8000/docs</code>.</p>
+
+    <h2>7. Project Structure</h2>
+    <p>Here is a brief overview of the project's directory structure:</p>
+    <pre><code>/
+├─ api/                  # FastAPI application
+├─ backtest/             # Backtesting engine
+├─ config/               # YAML configuration
+├─ data_contracts/       # JSON schemas for data validation
+├─ etl/                  # Data ingestion & feature engineering
+├─ labeling/             # Label generation
+├─ modeling/             # HMM + classifier + pipeline
+├─ schedules/            # Placeholder for Airflow DAGs
+├─ stores/               # Parquet-based data stores
+├─ utils/                # Utility modules (calendar, CV, etc.)
+├─ samples/              # Sample CSV data for testing
+├─ tests/                # Unit tests
+└─ data/                 # Runtime data (ignored by git)</code></pre>
+
+    <h2>8. Development</h2>
+
+    <h3>Running Tests</h3>
+    <p>To run the full test suite:</p>
+    <pre><code>pytest -v</code></pre>
+    <p>To run tests with coverage:</p>
+    <pre><code>pytest --cov=. --cov-report=html</code></pre>
+
+    <h3>Code Quality</h3>
+    <p>The project uses <code>black</code> for code formatting and <code>ruff</code> for linting. You can run them manually:</p>
+    <pre><code>make format
+make lint</code></pre>
+    <p>Pre-commit hooks are also configured to run these checks automatically when you commit code.</p>
+
+    <h2>9. Roadmap & Future Work</h2>
+    <p>This project is a starter kit and has several areas for future development:</p>
+    <ul>
+        <li>Data Provider Integration: The <code>etl/ingest_*.py</code> files are stubs. You need to implement the logic to fetch data from your chosen data provider (e.g., Yahoo Finance, Bloomberg).</li>
+        <li>Model Persistence: The training pipeline does not yet save the trained models. This needs to be implemented, potentially using a tool like MLflow.</li>
+        <li>Backtest Engine: The backtest engine (<code>backtest/engine.py</code>) is incomplete and needs to be fully implemented.</li>
+        <li>Deployment & Automation: The project includes placeholders for Docker and Airflow, but the implementation is left as an exercise.</li>
+    </ul>
+    <p>For a more detailed list of gaps and future work, please refer to the <code>IMPLEMENTATION_SUMMARY.md</code> file.</p>
+
+</body>
+</html>
