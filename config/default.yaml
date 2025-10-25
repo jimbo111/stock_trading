@@ -1,0 +1,77 @@
+# Project configuration for stock trading system
+
+# Target symbols (Samsung and SK Hynix)
+symbols:
+  - "005930.KS"  # Samsung Electronics
+  - "000660.KS"  # SK hynix
+
+# Prediction horizon in trading days
+horizon_days: 20
+
+# Portfolio and risk parameters
+kelly_frac: 0.25        # Kelly fraction for position sizing
+weight_max: 0.05        # Maximum weight per position (5%)
+commission_bps: 2       # Commission in basis points
+
+# Cross-validation parameters
+embargo_days: 20        # Embargo period after training set (days)
+cv_splits: 5            # Number of CV folds
+
+# HMM (Hidden Markov Model) configuration
+hmm:
+  n_states: 3           # Number of market regimes
+  cov_type: "full"      # Covariance type: full, diag, spherical, tied
+  n_iter: 100           # Max EM iterations
+  random_state: 42
+
+# Feature engineering parameters
+features:
+  zscore_window_min: 252                  # Minimum window for z-score (1 year)
+  exports_decay_half_life_days: 20        # Half-life for export decay
+  mom_windows: [21, 63, 126, 252]         # Momentum windows (1m, 3m, 6m, 12m)
+  vol_windows: [20, 60]                   # Volatility windows
+  beta_window: 252                        # Beta calculation window
+
+# Model parameters
+model:
+  classifier: "elastic_net"
+  C: 1.0                # Inverse regularization strength
+  l1_ratio: 0.3         # L1 vs L2 balance (0=Ridge, 1=Lasso)
+  calibration: true     # Use isotonic calibration
+
+# Data paths
+paths:
+  bronze: "./data/bronze"     # Raw data
+  silver: "./data/silver"     # Cleaned data
+  gold: "./data/gold"         # Feature/label storage
+  preds: "./data/preds"       # Predictions
+  models: "./data/models"     # Model artifacts
+  samples: "./samples/data"   # Sample data
+
+# API configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  title: "Stock Prediction API"
+  version: "1.0.0"
+  log_level: "INFO"
+
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "./logs/app.log"
+
+# Data sources (placeholders for production)
+data_sources:
+  market_data_api: "https://api.example.com/market-data"
+  memory_price_api: "https://api.example.com/memory-prices"
+  korea_trade_api: "https://api.example.com/korea-trade"
+
+# Feature flags
+features_enabled:
+  use_hmm: true
+  use_calibration: true
+  use_flows: true
+  use_exports: true
+  use_memory_prices: true
