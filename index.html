@@ -4,40 +4,314 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>User Guide: Korean Semiconductors Alpha Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --base-color: #0B0F14;
+            --surface-color: #111826;
+            --accent-cyan: #08F7FE;
+            --accent-magenta: #FE53BB;
+            --accent-green: #00FF6A;
+            --text-color: #E6E6E6;
+        }
+
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-3px, 3px); }
+            40% { transform: translate(-3px, -3px); }
+            60% { transform: translate(3px, 3px); }
+            80% { transform: translate(3px, -3px); }
+            100% { transform: translate(0); }
+        }
+
+        @keyframes scanline {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 100%; }
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 20px rgba(8, 247, 254, 0.2); }
+            50% { box-shadow: 0 0 30px rgba(8, 247, 254, 0.5); }
+            100% { box-shadow: 0 0 20px rgba(8, 247, 254, 0.2); }
+        }
+
         body {
-            font-family: sans-serif;
+            background-color: var(--base-color);
+            color: var(--text-color);
+            font-family: 'Space Grotesk', sans-serif;
             line-height: 1.6;
-            margin: 20px;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
         }
-        h1, h2, h3 {
-            color: #333;
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
         }
+
+        .hero {
+            text-align: center;
+            padding: 100px 20px;
+            background: linear-gradient(rgba(11, 15, 20, 0.8), rgba(11, 15, 20, 0.8)), url('https://via.placeholder.com/1920x1080/0B0F14/000000?text=Rainy+Nocturnal+Megacity') no-repeat center center/cover;
+            border-bottom: 1px solid var(--accent-cyan);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5) 1px, transparent 1px, transparent 2px);
+            animation: scanline 20s linear infinite;
+        }
+
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--accent-cyan);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px var(--accent-cyan), 0 0 20px var(--accent-cyan);
+            animation: glitch 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
+        }
+
+        h2 {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--accent-magenta);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 5px var(--accent-magenta), 0 0 10px var(--accent-magenta);
+        }
+
+        h3 {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--accent-green);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 5px var(--accent-green), 0 0 10px var(--accent-green);
+        }
+
+        .card {
+            background: rgba(17, 24, 38, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(8, 247, 254, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            animation: pulse 5s ease-in-out infinite;
+        }
+
+        .card:hover {
+            transform: translateY(-5px) scale(1.01);
+            box-shadow: 0 8px 32px rgba(8, 247, 254, 0.2);
+        }
+
         code {
-            background-color: #f4f4f4;
-            padding: 2px 4px;
+            font-family: 'Space Grotesk', monospace;
+            background-color: rgba(8, 247, 254, 0.1);
+            color: var(--accent-cyan);
+            padding: 3px 6px;
             border-radius: 4px;
+            border: 1px solid rgba(8, 247, 254, 0.2);
         }
+
         pre {
-            background-color: #f4f4f4;
-            padding: 10px;
-            border-radius: 4px;
+            background-color: var(--surface-color);
+            border: 1px solid rgba(8, 247, 254, 0.2);
+            padding: 15px;
+            border-radius: 8px;
             white-space: pre-wrap;
+            word-wrap: break-word;
+            box-shadow: inset 0 0 10px rgba(8, 247, 254, 0.1);
+        }
+
+        ul, ol {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 10px;
+        }
+
+        a {
+            color: var(--accent-magenta);
+            text-decoration: none;
+            transition: color 0.3s ease, text-shadow 0.3s ease;
+        }
+
+        a:hover {
+            color: var(--accent-green);
+            text-shadow: 0 0 10px var(--accent-green);
+        }
+
+        .cta-button {
+            display: inline-block;
+            background-color: var(--accent-cyan);
+            color: var(--base-color);
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 1px;
+            border: 1px solid var(--accent-cyan);
+            transition: background-color 0.3s ease, color 0.3s ease, transform 0.3s ease;
+        }
+
+        .cta-button:hover {
+            background-color: transparent;
+            color: var(--accent-cyan);
+            transform: scale(1.05);
+            box-shadow: 0 0 15px var(--accent-cyan);
+        }
+
+        @keyframes flow {
+            0% { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        .model-diagram {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            margin: 20px 0;
+        }
+
+        .stage, .arrow {
+            opacity: 0;
+            animation: flow 0.5s ease-out forwards;
+        }
+
+        .s1 { animation-delay: 0.5s; }
+        .a1 { animation-delay: 1s; }
+        .s2 { animation-delay: 1.5s; }
+        .a2 { animation-delay: 2s; }
+        .s3 { animation-delay: 2.5s; }
+        .a3 { animation-delay: 3s; }
+        .s4 { animation-delay: 3.5s; }
+        .a4 { animation-delay: 4s; }
+        .s5 { animation-delay: 4.5s; }
+
+        .command-palette {
+            margin: 20px 0;
+        }
+
+        #command-input {
+            background-color: var(--surface-color);
+            color: var(--accent-cyan);
+            border: 1px solid var(--accent-cyan);
+            padding: 10px;
+            width: 300px;
+            font-family: 'Space Grotesk', monospace;
+        }
+
+        #command-button {
+            background-color: var(--accent-cyan);
+            color: var(--base-color);
+            border: 1px solid var(--accent-cyan);
+            padding: 10px;
+            cursor: pointer;
+        }
+
+        .card.flipped .card-back {
+            transform: rotateY(0deg);
+        }
+
+        .card .card-front, .card .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            transition: transform 0.6s;
+        }
+
+        .card .card-back {
+            transform: rotateY(180deg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: var(--surface-color);
+        }
+
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+        }
+
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: var(--surface-color);
+            color: var(--text-color);
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
         }
     </style>
 </head>
 <body>
 
-    <h1>User Guide: Korean Semiconductors Alpha Engine</h1>
+    <div class="hero">
+        <h1>Korean Semiconductors Alpha Engine</h1>
+        <p>A production-ready starter kit for building a quantitative trading system.</p>
+        <div class="command-palette">
+            <input type="text" id="command-input" placeholder="> Enter command...">
+            <button id="command-button">Run</button>
+        </div>
+        <p id="command-output"></p>
+        <a href="#quick-start" class="cta-button">Get Started</a>
+    </div>
 
-    <h2>1. Introduction</h2>
-    <p>Welcome to the Korean Semiconductors Alpha Engine! This project is a comprehensive, production-ready starter kit for building a quantitative trading system. It's designed to predict the 20-day excess returns of major Korean semiconductor stocks, like Samsung and SK hynix, against the KOSPI benchmark.</p>
-    <p>The system uses a combination of Hidden Markov Models (HMM) to identify market regimes (e.g., bull, bear, neutral) and a calibrated Elastic Net classifier to make directional predictions.</p>
-    <p>This guide will walk you through the setup, configuration, and usage of the various components of this system.</p>
+    <div class="container">
+        <div class="card">
+            <h2>1. Introduction</h2>
+            <p>Welcome to the Korean Semiconductors Alpha Engine! This project is a comprehensive, production-ready starter kit for building a quantitative trading system. It's designed to predict the 20-day excess returns of major Korean semiconductor stocks, like Samsung and SK hynix, against the KOSPI benchmark.</p>
+            <p>The system uses a combination of Hidden Markov Models (HMM) to identify market regimes (e.g., bull, bear, neutral) and a calibrated Elastic Net classifier to make directional predictions.</p>
+        </div>
 
-    <h2>2. Architecture Overview</h2>
-    <p>The system is designed with a modular and production-friendly architecture. The data flows through the system as follows:</p>
-    <pre><code>Raw Data Sources → ETL Pipeline → Feature Store (Parquet)
+        <div class="card">
+            <h2>Model Architecture</h2>
+            <p>The model is a two-stage pipeline that first identifies the market regime and then makes a prediction.</p>
+            <div class="model-diagram">
+                <span class="stage s1">[INPUT: Raw Market Data]</span>
+                <span class="arrow a1">-></span>
+                <span class="stage s2">[ETL: Feature Engineering]</span>
+                <span class="arrow a2">-></span>
+                <span class="stage s3">[HMM: Market Regime Detection]</span>
+                <span class="arrow a3">-></span>
+                <span class="stage s4">[CLASSIFIER: Directional Prediction]</span>
+                <span class="arrow a4">-></span>
+                <span class="stage s5">[OUTPUT: Prediction]</span>
+            </div>
+            <p>The <strong>Hidden Markov Model (HMM)</strong> identifies the current market regime (e.g., bull, bear, neutral) based on historical data. The output of the HMM is then fed into the <strong>Elastic Net classifier</strong>, which makes a directional prediction (up or down) for the next 20 days.</p>
+        </div>
+
+        <div class="card">
+            <h2>2. Architecture Overview</h2>
+            <p>The system is designed with a modular and production-friendly architecture. The data flows through the system as follows:</p>
+            <pre><code>Raw Data Sources → ETL Pipeline → Feature Store (Parquet)
                                        ↓
                     Labels ← Label Generator (20D ER)
                        ↓
@@ -48,17 +322,19 @@
          Daily Scoring → Prediction Store → API
                        ↓
               Backtest Engine → Reports</code></pre>
-    <p>Key Principles:</p>
-    <ul>
-        <li>No Lookahead Bias: All features are calculated using data available up to the previous day (t-1).</li>
-        <li>No Label Leakage: The model is trained using Purged K-Fold Cross-Validation to prevent information from the training set leaking into the validation set.</li>
-        <li>Production-Ready: The code is modular, typed, tested, and includes logging.</li>
-        <li>Schema Contracts: All data is validated against predefined JSON schemas to ensure data quality.</li>
-    </ul>
+            <p>Key Principles:</p>
+            <ul>
+                <li>No Lookahead Bias: All features are calculated using data available up to the previous day (t-1).</li>
+                <li>No Label Leakage: The model is trained using Purged K-Fold Cross-Validation to prevent information from the training set leaking into the validation set.</li>
+                <li>Production-Ready: The code is modular, typed, tested, and includes logging.</li>
+                <li>Schema Contracts: All data is validated against predefined JSON schemas to ensure data quality.</li>
+            </ul>
+        </div>
 
-    <h2>3. Quick Start (5-Minute Demo)</h2>
-    <p>This will get you up and running with the sample data included in the project.</p>
-    <pre><code># 1. Navigate to the project directory
+        <div id="quick-start" class="card">
+            <h2>3. Quick Start (5-Minute Demo)</h2>
+            <p>This will get you up and running with the sample data included in the project.</p>
+            <pre><code># 1. Navigate to the project directory
 cd stock_trading
 
 # 2. Create and activate a virtual environment
@@ -77,99 +353,88 @@ python labeling/make_labels.py --use-samples
 
 # 6. Start the API server
 uvicorn api.main:app --reload --port 8000</code></pre>
-    <p>You now have the API server running at <code>http://localhost:8000</code>. You can explore the API documentation at <code>http://localhost:8000/docs</code>.</p>
+            <p>You now have the API server running at <code>http://localhost:8000</code>. You can explore the API documentation at <a href="http://localhost:8000/docs" target="_blank">http://localhost:8000/docs</a>.</p>
+        </div>
 
-    <h2>4. Installation</h2>
-    <p>Follow these steps for a full installation:</p>
-    <ol>
-        <li>Clone the repository:
-            <pre><code>git clone &lt;repository_url&gt;
+        <div class="card">
+            <h2>4. Installation</h2>
+            <ol>
+                <li>Clone the repository:
+                    <pre><code>git clone &lt;repository_url&gt;
 cd stock_trading</code></pre>
-        </li>
-        <li>Set up the environment:
-            <pre><code>python -m venv .venv
+                </li>
+                <li>Set up the environment:
+                    <pre><code>python -m venv .venv
 source .venv/bin/activate</code></pre>
-        </li>
-        <li>Install dependencies:
-            <pre><code>pip install -r requirements.txt</code></pre>
-        </li>
-        <li>Set up pre-commit hooks (for development):
-            <pre><code>pre-commit install</code></pre>
-        </li>
-        <li>Set the PYTHONPATH:
-            <pre><code>export PYTHONPATH="${PYTHONPATH}:$(pwd)"</code></pre>
-            This is important to ensure that the Python interpreter can find the project's modules.
-        </li>
-    </ol>
+                </li>
+                <li>Install dependencies:
+                    <pre><code>pip install -r requirements.txt</code></pre>
+                </li>
+                <li>Set up pre-commit hooks (for development):
+                    <pre><code>pre-commit install</code></pre>
+                </li>
+                <li>Set the PYTHONPATH:
+                    <pre><code>export PYTHONPATH="${PYTHONPATH}:$(pwd)"</code></pre>
+                    This is important to ensure that the Python interpreter can find the project's modules.
+                </li>
+            </ol>
+        </div>
 
-    <h2>5. Configuration</h2>
-    <p>All project configurations are managed in the <code>config/default.yaml</code> file. Here are some of the key parameters you can modify:</p>
-    <pre><code>symbols: ["005930.KS", "000660.KS"]  # Stocks to trade
+        <div class="card">
+            <h2>5. Configuration</h2>
+            <p>All project configurations are managed in the <code>config/default.yaml</code> file. Here are some of the key parameters you can modify:</p>
+            <pre><code>symbols: ["005930.KS", "000660.KS"]  # Stocks to trade
 horizon_days: 20                      # Prediction horizon
 kelly_frac: 0.25                      # Kelly fraction for position sizing
 weight_max: 0.05                      # Maximum position size
 commission_bps: 2                     # Transaction cost in basis points
 embargo_days: 20                      # CV embargo period</code></pre>
-    <p>You can also configure the logging behavior in <code>config/logging.yaml</code>.</p>
+            <p>You can also configure the logging behavior in <code>config/logging.yaml</code>.</p>
+        </div>
 
-    <h2>6. Usage</h2>
+        <div class="card">
+            <h2>6. Usage</h2>
 
-    <h3>6.1. Generating Features (ETL)</h3>
-    <p>The ETL (Extract, Transform, Load) pipeline is responsible for ingesting raw data and generating features.</p>
-    <ul>
-        <li>To run with sample data:
-            <pre><code>python etl/build_features.py --use-samples</code></pre>
-        </li>
-        <li>To run with your own data (production):
-            <p>You will first need to implement the data ingestion logic in the <code>etl/ingest_*.py</code> files to connect to your data provider. Then, you can run:</p>
-            <pre><code>python etl/build_features.py --start-date 2020-01-01 --end-date 2025-10-24</code></pre>
-        </li>
-    </ul>
-    <p>The generated features will be stored in <code>data/gold/dt=YYYY-MM-DD/features.parquet</code>.</p>
+            <h3>6.1. Generating Features (ETL)</h3>
+            <ul>
+                <li>To run with sample data:
+                    <pre><code>python etl/build_features.py --use-samples</code></pre>
+                </li>
+                <li>To run with your own data (production):
+                    <p>You will first need to implement the data ingestion logic in the <code>etl/ingest_*.py</code> files to connect to your data provider. Then, you can run:</p>
+                    <pre><code>python etl/build_features.py --start-date 2020-01-01 --end-date 2025-10-24</code></pre>
+                </li>
+            </ul>
 
-    <h3>6.2. Generating Labels</h3>
-    <p>This step creates the target variable for the model (20-day forward excess returns).</p>
-    <pre><code>python labeling/make_labels.py --use-samples</code></pre>
-    <p>The labels will be stored in <code>data/gold/dt=YYYY-MM-DD/labels.parquet</code>.</p>
+            <h3>6.2. Generating Labels</h3>
+            <pre><code>python labeling/make_labels.py --use-samples</code></pre>
 
-    <h3>6.3. Training the Model</h3>
-    <p>This script runs the full modeling pipeline:</p>
-    <pre><code>python modeling/pipeline.py --train --use-samples</code></pre>
-    <p>The training process involves:</p>
-    <ol>
-        <li>Merging features and labels.</li>
-        <li>Fitting a 3-state Gaussian HMM to detect market regimes.</li>
-        <li>Augmenting the feature set with the HMM state probabilities.</li>
-        <li>Training an Elastic Net classifier using Purged 5-Fold Cross-Validation.</li>
-        <li>Calibrating the model's predictions using Isotonic Regression.</li>
-    </ol>
-    <p>Note: Model persistence (saving the trained model) is not yet implemented. You will need to modify <code>modeling/pipeline.py</code> to save the model artifacts.</p>
+            <h3>6.3. Training the Model</h3>
+            <pre><code>python modeling/pipeline.py --train --use-samples</code></pre>
 
-    <h3>6.4. Running the Backtest</h3>
-    <p>The backtest engine simulates the trading strategy on historical data.</p>
-    <pre><code># This is a placeholder, as the backtest engine is not fully implemented
+            <h3>6.4. Running the Backtest</h3>
+            <pre><code># This is a placeholder, as the backtest engine is not fully implemented
 python backtest/engine.py --use-samples --report ./reports/sample</code></pre>
 
-    <h3>6.5. Using the API</h3>
-    <p>The API provides access to the model's predictions.</p>
-    <ul>
-        <li>Start the API server:
-            <pre><code>uvicorn api.main:app --reload --port 8000</code></pre>
-        </li>
-        <li>API Endpoints:
+            <h3>6.5. Using the API</h3>
             <ul>
-                <li><code>GET /v1/health</code>: Health check.</li>
-                <li><code>GET /v1/predict?symbol=005930.KS</code>: Get the latest prediction for a single stock.</li>
-                <li><code>GET /v1/predictions</code>: Get all latest predictions.</li>
-                <li><code>GET /v1/dates</code>: List the dates for which predictions are available.</li>
+                <li>Start the API server:
+                    <pre><code>uvicorn api.main:app --reload --port 8000</code></pre>
+                </li>
+                <li>API Endpoints:
+                    <ul>
+                        <li><code>GET /v1/health</code>: Health check.</li>
+                        <li><code>GET /v1/predict?symbol=005930.KS</code>: Get the latest prediction for a single stock.</li>
+                        <li><code>GET /v1/predictions</code>: Get all latest predictions.</li>
+                        <li><code>GET /v1/dates</code>: List the dates for which predictions are available.</li>
+                    </ul>
+                </li>
             </ul>
-        </li>
-    </ul>
-    <p>You can interact with the API using <code>curl</code> or by visiting the auto-generated documentation at <code>http://localhost:8000/docs</code>.</p>
+        </div>
 
-    <h2>7. Project Structure</h2>
-    <p>Here is a brief overview of the project's directory structure:</p>
-    <pre><code>/
+        <div class="card">
+            <h2>7. Project Structure</h2>
+            <pre><code>/
 ├─ api/                  # FastAPI application
 ├─ backtest/             # Backtesting engine
 ├─ config/               # YAML configuration
@@ -183,30 +448,76 @@ python backtest/engine.py --use-samples --report ./reports/sample</code></pre>
 ├─ samples/              # Sample CSV data for testing
 ├─ tests/                # Unit tests
 └─ data/                 # Runtime data (ignored by git)</code></pre>
+        </div>
 
-    <h2>8. Development</h2>
-
-    <h3>Running Tests</h3>
-    <p>To run the full test suite:</p>
-    <pre><code>pytest -v</code></pre>
-    <p>To run tests with coverage:</p>
-    <pre><code>pytest --cov=. --cov-report=html</code></pre>
-
-    <h3>Code Quality</h3>
-    <p>The project uses <code>black</code> for code formatting and <code>ruff</code> for linting. You can run them manually:</p>
-    <pre><code>make format
+        <div class="card">
+            <h2>8. Development</h2>
+            <h3>Running Tests</h3>
+            <pre><code>pytest -v</code></pre>
+            <h3>Code Quality</h3>
+            <pre><code>make format
 make lint</code></pre>
-    <p>Pre-commit hooks are also configured to run these checks automatically when you commit code.</p>
+        </div>
 
-    <h2>9. Roadmap & Future Work</h2>
-    <p>This project is a starter kit and has several areas for future development:</p>
-    <ul>
-        <li>Data Provider Integration: The <code>etl/ingest_*.py</code> files are stubs. You need to implement the logic to fetch data from your chosen data provider (e.g., Yahoo Finance, Bloomberg).</li>
-        <li>Model Persistence: The training pipeline does not yet save the trained models. This needs to be implemented, potentially using a tool like MLflow.</li>
-        <li>Backtest Engine: The backtest engine (<code>backtest/engine.py</code>) is incomplete and needs to be fully implemented.</li>
-        <li>Deployment & Automation: The project includes placeholders for Docker and Airflow, but the implementation is left as an exercise.</li>
-    </ul>
-    <p>For a more detailed list of gaps and future work, please refer to the <code>IMPLEMENTATION_SUMMARY.md</code> file.</p>
+        <div class="card">
+            <h2>9. Roadmap & Future Work</h2>
+            <ul>
+                <li>Data Provider Integration: The <code>etl/ingest_*.py</code> files are stubs. You need to implement the logic to fetch data from your chosen data provider (e.g., Yahoo Finance, Bloomberg).</li>
+                <li>Model Persistence: The training pipeline does not yet save the trained models. This needs to be implemented, potentially using a tool like MLflow.</li>
+                <li>Backtest Engine: The backtest engine (<code>backtest/engine.py</code>) is incomplete and needs to be fully implemented.</li>
+                <li>Deployment & Automation: The project includes placeholders for Docker and Airflow, but the implementation is left as an exercise.</li>
+            </ul>
+            <p>For a more detailed list of gaps and future work, please refer to the <code>IMPLEMENTATION_SUMMARY.md</code> file.</p>
+        </div>
+        <div class="card">
+            <h2>Contact</h2>
+            <p>Name: Jimmy Kim</p>
+            <p>Email: sanggyeom.kim@stonybrook.edu</p>
+        </div>
+    </div>
+
+    <script>
+        // Command Palette functionality
+        const commandInput = document.getElementById('command-input');
+        const commandButton = document.getElementById('command-button');
+        const commandOutput = document.getElementById('command-output');
+
+        commandButton.addEventListener('click', () => {
+            const command = commandInput.value.toLowerCase();
+            let response = '';
+
+            switch (command) {
+                case 'help':
+                    response = 'Available commands: help, status, about';
+                    break;
+                case 'status':
+                    response = 'System status: Online. All modules operational.';
+                    break;
+                case 'about':
+                    response = 'Korean Semiconductors Alpha Engine v1.0. Designed by Jimmy Kim.';
+                    break;
+                default:
+                    response = `Command not recognized: ${command}. Type 'help' for options.`;
+            }
+            commandOutput.textContent = response;
+            commandInput.value = '';
+        });
+
+        // Smooth scroll for Get Started button
+        document.querySelector('.cta-button').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.querySelector(this.getAttribute('href')).scrollIntoView({
+                behavior: 'smooth'
+            });
+        });
+
+        // Interactive Cards (flip effect)
+        document.querySelectorAll('.card').forEach(card => {
+            card.addEventListener('click', () => {
+                card.classList.toggle('flipped');
+            });
+        });
+    </script>
 
 </body>
 </html>
