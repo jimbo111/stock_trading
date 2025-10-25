@@ -4,7 +4,7 @@
 
 This skeleton is opinionated, leakage-safe, and production-friendly. It combines Hidden Markov Models (HMM) for regime detection with calibrated Elastic Net classifiers for directional prediction.
 
-## ⚡ Quickstart
+## Quickstart
 
 ```bash
 # 1) Clone and setup
@@ -27,11 +27,12 @@ make run-api
 
 ---
 
-## 📋 What This Repo Provides
+## What This Repo Provides
 
 ### Core Functionality
 
 1. **Feature Engineering** (`etl/`)
+
    - Return & momentum indicators (1d, 5d, 20d, 1m-12m)
    - Volatility & risk metrics (realized vol, beta, idiosyncratic vol, drawdown)
    - FX features (USD/KRW changes)
@@ -41,23 +42,27 @@ make run-api
    - All features z-scored with expanding window (t-1) to prevent leakage
 
 2. **Label Generation** (`labeling/`)
+
    - 20-day forward excess returns vs KOSPI benchmark
    - Binary classification target (positive/negative ER)
    - Proper forward-looking alignment with no leakage
 
 3. **Modeling** (`modeling/`)
+
    - **HMM (Gaussian, 3-state):** Detects market regimes (bear/neutral/bull)
    - **Elastic Net Classifier:** L1+L2 regularized logistic regression
    - **Isotonic Calibration:** Out-of-fold calibration for reliable probabilities
    - **Purged K-Fold CV:** Prevents label overlap leakage (Lopez de Prado)
 
 4. **Backtest Engine** (`backtest/`)
+
    - Event-driven daily simulation
    - Kelly criterion position sizing with vol scaling
    - Commission & slippage models
    - Performance metrics (IR, hit rate, turnover, drawdown)
 
 5. **API** (`api/`)
+
    - FastAPI REST endpoints
    - Serves latest predictions with model version tracking
    - Degradation flags for stale data
@@ -70,7 +75,7 @@ make run-api
 
 ---
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 ```
 Raw Data Sources → ETL Pipeline → Feature Store (Parquet)
@@ -87,6 +92,7 @@ Raw Data Sources → ETL Pipeline → Feature Store (Parquet)
 ```
 
 **Key Design Principles:**
+
 - **No lookahead bias:** All features use t-1 windows
 - **No label leakage:** Purged CV with embargo
 - **Production-ready:** Modular, typed, tested, logged
@@ -94,7 +100,7 @@ Raw Data Sources → ETL Pipeline → Feature Store (Parquet)
 
 ---
 
-## 📂 Repository Structure
+## Repository Structure
 
 ```
 semis-alpha-starter/
@@ -119,22 +125,22 @@ semis-alpha-starter/
 
 ---
 
-## 🔧 Configuration
+## Configuration
 
 Edit `config/default.yaml`:
 
 ```yaml
-symbols: ["005930.KS", "000660.KS"]  # Samsung, SK hynix
-horizon_days: 20                      # Prediction horizon
-kelly_frac: 0.25                      # Kelly fraction for sizing
-weight_max: 0.05                      # Max position size
-commission_bps: 2                     # Transaction cost
-embargo_days: 20                      # CV embargo period
+symbols: ["005930.KS", "000660.KS"] # Samsung, SK hynix
+horizon_days: 20 # Prediction horizon
+kelly_frac: 0.25 # Kelly fraction for sizing
+weight_max: 0.05 # Max position size
+commission_bps: 2 # Transaction cost
+embargo_days: 20 # CV embargo period
 ```
 
 ---
 
-## 🚀 Usage
+## Usage
 
 ### 1. Generate Features
 
@@ -163,6 +169,7 @@ python modeling/pipeline.py --train --use-samples
 ```
 
 **Process:**
+
 1. Merges features + labels
 2. Fits 3-state Gaussian HMM on selected features
 3. Augments features with HMM state probabilities
@@ -187,19 +194,21 @@ uvicorn api.main:app --reload --port 8000
 ```
 
 **Endpoints:**
+
 - `GET /v1/health` - Health check
 - `GET /v1/predict?symbol=005930.KS` - Single prediction
 - `GET /v1/predictions` - All latest predictions
 - `GET /v1/dates` - List available dates
 
 **Example:**
+
 ```bash
 curl "http://localhost:8000/v1/predict?symbol=005930.KS"
 ```
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run all tests
@@ -213,8 +222,9 @@ pytest --cov=. --cov-report=html
 ```
 
 **Test Coverage:**
-- ✅ Purged K-Fold CV
-- ✅ Label generation
+
+- Purged K-Fold CV
+- Label generation
 - ✅ HMM fitting/transforming
 - ⚠️ Feature engineering (partial)
 - ⚠️ Backtest engine (TODO)
@@ -222,23 +232,26 @@ pytest --cov=. --cov-report=html
 
 ---
 
-## ⚠️ Known Issues & Future Work
+## Known Issues & Future Work
 
 ### Critical Implementation Gaps
 
 1. **Data Provider Integration**
+
    - ❌ `etl/ingest_*.py` modules are **stubs only**
    - ❌ No real market data connectors (Yahoo Finance, Bloomberg, etc.)
    - ❌ No vendor API key management
    - **Action Required:** Implement actual data fetching in ETL modules
 
 2. **Model Persistence**
+
    - ❌ Trained models not saved to disk
    - ❌ No MLflow integration for experiment tracking
    - ❌ No model versioning or registry
    - **Action Required:** Add serialization in `modeling/pipeline.py`
 
 3. **Backtest Engine**
+
    - ⚠️ `backtest/engine.py` is **incomplete**
    - ❌ Missing daily rebalancing logic
    - ❌ Cost models not fully implemented
@@ -246,6 +259,7 @@ pytest --cov=. --cov-report=html
    - **Action Required:** Implement `run_backtest()` function
 
 4. **Feature Engineering Edge Cases**
+
    - ⚠️ Beta calculation simplified (may have alignment issues)
    - ⚠️ Idiosyncratic volatility needs validation
    - ⚠️ Export decay formula assumes monthly data
@@ -259,11 +273,13 @@ pytest --cov=. --cov-report=html
 ### Data Quality Concerns
 
 1. **Schema Validation**
+
    - ⚠️ JSON schema validation is basic
    - ❌ No automated data quality checks in pipeline
    - **Action Required:** Implement `etl/quality.py` with comprehensive checks
 
 2. **Missing Data Handling**
+
    - ⚠️ Forward-fill assumptions may be naive
    - ⚠️ Z-score calculation with sparse data untested
    - **Action Required:** Add robust imputation strategies
@@ -276,12 +292,14 @@ pytest --cov=. --cov-report=html
 ### Performance & Scalability
 
 1. **Feature Computation**
+
    - ⚠️ Not optimized for large datasets
    - ❌ No parallelization
    - ❌ No incremental feature updates
    - **Action Required:** Consider Dask/Ray for scaling
 
 2. **Cross-Validation**
+
    - ⚠️ Purged CV can be slow with many folds
    - **Action Required:** Profile and optimize if needed
 
@@ -293,17 +311,20 @@ pytest --cov=. --cov-report=html
 ### Production Readiness
 
 1. **Monitoring & Alerting**
+
    - ❌ No model performance monitoring
    - ❌ No data drift detection
    - ❌ No automated retraining triggers
    - **Action Required:** Implement monitoring stack
 
 2. **Security**
+
    - ❌ API has no authentication
    - ❌ Secrets not managed (see `.env.example`)
    - **Action Required:** Add OAuth2/API keys, use secret manager
 
 3. **Deployment**
+
    - ⚠️ Dockerfile is placeholder only
    - ❌ No CI/CD pipeline
    - ❌ No infrastructure-as-code
@@ -317,10 +338,12 @@ pytest --cov=. --cov-report=html
 ### Model Improvements
 
 1. **Feature Selection**
+
    - ⚠️ Current features are standard; not optimized
    - **Consider:** Add alternative data (sentiment, options flow, analyst estimates)
 
 2. **Model Ensemble**
+
    - ⚠️ Single model architecture
    - **Consider:** Add LGBM regressor, LSTM for time-series, ensemble methods
 
@@ -330,29 +353,33 @@ pytest --cov=. --cov-report=html
 
 ---
 
-## 🔒 Security Notes
+## Security Notes
 
 **Never commit:**
+
 - API keys (use `.env` file, see `.env.example`)
 - Database credentials
 - Model artifacts (large files → use DVC or MLflow artifact store)
 
 **Recommended:**
+
 - Use secret manager (AWS Secrets Manager, Azure Key Vault)
 - Rotate keys regularly
 - Audit data access logs
 
 ---
 
-## 📊 Expected Performance
+## Expected Performance
 
 **Note:** Performance depends heavily on:
+
 - Quality of input data
 - Market regime (works better in trending markets)
 - Parameter tuning
 - Transaction costs
 
 **Typical Metrics (Backtested):**
+
 - Information Ratio: 0.5 - 1.5 (target)
 - Hit Rate: 52-58% (modest edge)
 - Annualized Turnover: 100-200%
@@ -362,25 +389,29 @@ pytest --cov=. --cov-report=html
 
 ---
 
-## 🛠️ Development Workflow
+## Development Workflow
 
 1. **Feature Branch**
+
    ```bash
    git checkout -b feature/your-feature
    ```
 
 2. **Make Changes**
+
    - Write code
    - Add tests
    - Update documentation
 
 3. **Format & Lint**
+
    ```bash
    make format
    make lint
    ```
 
 4. **Test**
+
    ```bash
    pytest -v
    ```
@@ -393,7 +424,7 @@ pytest --cov=. --cov-report=html
 
 ---
 
-## 📚 Key References
+## Key References
 
 - **Advances in Financial Machine Learning** (Lopez de Prado) - Purged CV, metalabeling
 - **Quantitative Trading** (Chan) - Mean reversion, momentum strategies
@@ -403,7 +434,7 @@ pytest --cov=. --cov-report=html
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -413,7 +444,7 @@ pytest --cov=. --cov-report=html
 
 ---
 
-## 📝 License
+## License
 
 This is a starter skeleton for educational/research purposes. Adapt for your use case.
 
@@ -421,21 +452,24 @@ This is a starter skeleton for educational/research purposes. Adapt for your use
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Import Errors
+
 ```bash
 # Ensure you're in the project root and venv is activated
 export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 ```
 
 ### Sample Data Not Found
+
 ```bash
 # Check that sample CSVs exist
 ls samples/data/
 ```
 
 ### API Won't Start
+
 ```bash
 # Check if port 8000 is in use
 lsof -i :8000
@@ -444,6 +478,7 @@ uvicorn api.main:app --port 8001
 ```
 
 ### Tests Failing
+
 ```bash
 # Install test dependencies
 pip install pytest pytest-cov
@@ -453,9 +488,10 @@ pytest -vv
 
 ---
 
-## 📞 Support
+## Support
 
 For issues, questions, or contributions:
+
 1. Check existing issues on GitHub
 2. Open a new issue with:
    - Clear description
@@ -465,15 +501,17 @@ For issues, questions, or contributions:
 
 ---
 
-## 🎯 Roadmap
+## Roadmap
 
 **Phase 1 (Current):**
-- ✅ Core feature engineering
-- ✅ Label generation
+
+- Core feature engineering
+- Label generation
 - ✅ HMM + classifier pipeline
 - ✅ Basic API
 
 **Phase 2 (Next 3 months):**
+
 - ⬜ Complete backtest engine
 - ⬜ MLflow integration
 - ⬜ Production data providers
@@ -481,6 +519,7 @@ For issues, questions, or contributions:
 - ⬜ Comprehensive testing
 
 **Phase 3 (Next 6 months):**
+
 - ⬜ Advanced features (sentiment, options)
 - ⬜ Model ensemble
 - ⬜ Real-time scoring
@@ -488,6 +527,7 @@ For issues, questions, or contributions:
 - ⬜ Automated retraining
 
 **Phase 4 (Future):**
+
 - ⬜ Multi-asset expansion
 - ⬜ Deep learning models
 - ⬜ Alternative data integration
@@ -496,6 +536,7 @@ For issues, questions, or contributions:
 ---
 
 **Remember:** This is a skeleton. You must implement:
+
 1. Real data connectors in `etl/ingest_*.py`
 2. Model serialization in `modeling/pipeline.py`
 3. Complete backtest in `backtest/engine.py`
@@ -505,4 +546,4 @@ For issues, questions, or contributions:
 
 ---
 
-*Built with ❤️ for quantitative researchers and algo traders*
+_Built with for quantitative researchers and algo traders_
