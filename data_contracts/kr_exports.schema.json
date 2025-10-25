@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "kr_exports",
+  "type": "object",
+  "properties": {
+    "as_of_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "category": {
+      "type": "string"
+    },
+    "value_usd": {
+      "type": "number"
+    },
+    "yoy_change": {
+      "type": "number"
+    }
+  },
+  "required": ["as_of_date", "category", "value_usd"],
+  "additionalProperties": false
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "krx_flows",
+  "type": "object",
+  "properties": {
+    "as_of_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "symbol": {
+      "type": "string"
+    },
+    "foreign_net_buy_value": {
+      "type": "number"
+    },
+    "foreign_net_buy_volume": {
+      "type": "integer"
+    }
+  },
+  "required": ["as_of_date", "symbol", "foreign_net_buy_value"],
+  "additionalProperties": false
+}
