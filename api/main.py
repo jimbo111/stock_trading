@@ -7,6 +7,7 @@ from typing import List, Optional
 
 import yaml
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.schemas import HealthResponse, Prediction, PredictionListResponse
@@ -20,6 +21,15 @@ app = FastAPI(
     title="Semis Alpha API",
     description="Korean semiconductor stock alpha predictions",
     version="0.1.0"
+)
+
+# Enable CORS for dashboard on port 3000
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
