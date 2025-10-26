@@ -54,6 +54,12 @@ function app() {
             // Set up HTMX event listeners
             this.setupHTMXListeners();
 
+            // Listen for custom load-predictions event
+            document.addEventListener('load-predictions', () => {
+                console.log('📊 Load predictions event triggered');
+                this.loadPredictions();
+            });
+
             // Setup periodic API status check
             setInterval(() => {
                 if (!this.isRunning) {
