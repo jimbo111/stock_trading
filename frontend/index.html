@@ -90,7 +90,7 @@
                             hx-post="/api/pipeline/score"
                             hx-target="#status-content"
                             hx-on::htmx:beforeRequest="updateStatus('Step 4', 'Generating predictions...', 'info')"
-                            hx-on::htmx:afterRequest="updateStatus('Step 4', 'Predictions generated!', 'success'); setTimeout(() => $dispatch('load-predictions'), 500)"
+                            hx-on::htmx:afterRequest="updateStatus('Step 4', 'Predictions generated!', 'success'); setTimeout(() => window.loadPredictions(), 500)"
                             :disabled="isRunning"
                             @click="currentStep = 4">
                             <i class="bi bi-magic"></i> Step 4: Generate Predictions
@@ -148,7 +148,7 @@
                         <button
                             type="button"
                             class="btn btn-sm btn-light"
-                            @click="$dispatch('load-predictions')"
+                            @click="loadPredictions()"
                             title="Refresh predictions">
                             <i class="bi bi-arrow-clockwise"></i>
                         </button>

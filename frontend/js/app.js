@@ -193,7 +193,12 @@ function app() {
 
         displayPredictions(predictions) {
             const resultsContent = document.getElementById('results-content');
-            if (!resultsContent) return;
+            if (!resultsContent) {
+                console.error('❌ results-content element not found');
+                return;
+            }
+
+            console.log(`📊 Displaying predictions: ${predictions ? predictions.length : 0} items`);
 
             if (!predictions || predictions.length === 0) {
                 resultsContent.innerHTML = `
@@ -202,6 +207,7 @@ function app() {
                         <strong>No predictions available yet.</strong>
                     </div>
                 `;
+                console.warn('⚠️  No predictions to display');
                 return;
             }
 
@@ -226,7 +232,7 @@ function app() {
             // Show first 20 predictions
             predictions.slice(0, 20).forEach(pred => {
                 const pUp = (parseFloat(pred.p_up) * 100).toFixed(2);
-                const stateProbs = pred.state_probs ? pred.state_probs.map(p => (p * 100).toFixed(0)).join('%,') + '%' : 'N/A';
+                const stateProbs = pred.state_probs && pred.state_probs.length > 0 ? pred.state_probs.map(p => (p * 100).toFixed(0)).join('%,') + '%' : 'N/A';
                 const vol = (parseFloat(pred.vol20_ann) * 100).toFixed(2);
                 const weight = (parseFloat(pred.weight_suggested) * 100).toFixed(2);
 
@@ -255,7 +261,7 @@ function app() {
             `;
 
             resultsContent.innerHTML = html;
-            console.log(`✅ Displayed ${predictions.length} predictions`);
+            console.log(`✅ Displayed ${predictions.length} predictions in table`);
         },
 
         // ============================================
@@ -307,6 +313,22 @@ function app() {
             this.statusMessage = message;
             this.statusType = 'warning';
         }
+    }
+}
+
+// ============================================
+// Global Functions for External Calls
+// ============================================
+
+// Make loadPredictions available globally
+window.loadPredictions = function() {
+    console.log('🔄 loadPredictions called globally');
+    // Find the Alpine instance and call loadPredictions
+    const alpineRoot = document.querySelector('[x-data]');
+    if (alpineRoot && alpineRoot.__x) {
+        alpineRoot.__x.$data.loadPredictions();
+    } else {
+        console.warn('⚠️  Could not find Alpine instance');
     }
 }
 
