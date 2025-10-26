@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Stock Trading Quant Engine - Interactive ML Pipeline Dashboard">
+    <title>📈 Stock Trading Quant Engine</title>
+
+    <!-- Bootstrap 5.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body x-data="app()" @load="initApp()">
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="/">
+                <i class="bi bi-graph-up"></i> Quant Trading Engine
+            </a>
+            <span class="navbar-text text-muted ms-auto">
+                <small id="api-status">
+                    <span x-text="apiStatus" class="badge" :class="apiStatusClass"></span>
+                </small>
+            </span>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="container-fluid py-4">
+        <div class="row">
+            <!-- Left Sidebar - Pipeline Controls -->
+            <div class="col-lg-3 mb-4">
+                <div class="card h-100 shadow-sm border-primary">
+                    <div class="card-header bg-gradient-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-play-circle"></i> Pipeline Control
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small">Execute each step sequentially:</p>
+
+                        <!-- Step 1: Generate Features -->
+                        <button
+                            type="button"
+                            class="btn btn-outline-primary w-100 mb-3"
+                            hx-post="/api/pipeline/features"
+                            hx-target="#status-content"
+                            hx-on::htmx:beforeRequest="updateStatus('Step 1', 'Generating features...', 'info')"
+                            hx-on::htmx:afterRequest="updateStatus('Step 1', 'Features generated!', 'success')"
+                            :disabled="isRunning"
+                            @click="currentStep = 1">
+                            <i class="bi bi-lightning-charge"></i> Step 1: Generate Features
+                        </button>
+
+                        <!-- Step 2: Generate Labels -->
+                        <button
+                            type="button"
+                            class="btn btn-outline-primary w-100 mb-3"
+                            hx-post="/api/pipeline/labels"
+                            hx-target="#status-content"
+                            hx-on::htmx:beforeRequest="updateStatus('Step 2', 'Generating labels...', 'info')"
+                            hx-on::htmx:afterRequest="updateStatus('Step 2', 'Labels generated!', 'success')"
+                            :disabled="isRunning"
+                            @click="currentStep = 2">
+                            <i class="bi bi-tags"></i> Step 2: Generate Labels
+                        </button>
+
+                        <!-- Step 3: Train Models -->
+                        <button
+                            type="button"
+                            class="btn btn-outline-primary w-100 mb-3"
+                            hx-post="/api/pipeline/train"
+                            hx-target="#status-content"
+                            hx-on::htmx:beforeRequest="updateStatus('Step 3', 'Training models...', 'info')"
+                            hx-on::htmx:afterRequest="updateStatus('Step 3', 'Models trained!', 'success')"
+                            :disabled="isRunning"
+                            @click="currentStep = 3">
+                            <i class="bi bi-cpu"></i> Step 3: Train Models
+                        </button>
+
+                        <!-- Step 4: Generate Predictions -->
+                        <button
+                            type="button"
+                            class="btn btn-outline-primary w-100 mb-3"
+                            hx-post="/api/pipeline/score"
+                            hx-target="#status-content"
+                            hx-on::htmx:beforeRequest="updateStatus('Step 4', 'Generating predictions...', 'info')"
+                            hx-on::htmx:afterRequest="updateStatus('Step 4', 'Predictions generated!', 'success')"
+                            :disabled="isRunning"
+                            @click="currentStep = 4">
+                            <i class="bi bi-magic"></i> Step 4: Generate Predictions
+                        </button>
+
+                        <!-- Step 5: Start API -->
+                        <button
+                            type="button"
+                            class="btn btn-success w-100"
+                            hx-post="/api/pipeline/start-api"
+                            hx-target="#status-content"
+                            hx-on::htmx:beforeRequest="updateStatus('Step 5', 'Starting API on port 8000...', 'info')"
+                            hx-on::htmx:afterRequest="updateStatus('Step 5', 'API started!', 'success'); setTimeout(() => checkApiStatus(), 3000)"
+                            :disabled="isRunning"
+                            @click="currentStep = 5">
+                            <i class="bi bi-play-fill"></i> Step 5: Start API
+                        </button>
+
+                        <hr class="my-3">
+
+                        <!-- Status Indicator -->
+                        <div class="alert" :class="statusAlertClass" role="alert">
+                            <small>
+                                <strong x-text="currentStepLabel"></strong>
+                                <p x-text="statusMessage" class="mb-0"></p>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Main Content -->
+            <div class="col-lg-9">
+                <!-- Status Panel -->
+                <div class="card shadow-sm mb-4 border-info">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-info-circle"></i> Pipeline Status & Logs
+                        </h5>
+                    </div>
+                    <div class="card-body" id="status-content">
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>Ready to start.</strong> Click any step button to begin the pipeline execution.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Panel -->
+                <div class="card shadow-sm border-success">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-graph-up-arrow"></i> Results & Predictions
+                        </h5>
+                    </div>
+                    <div class="card-body" id="results-content">
+                        <div class="alert alert-secondary mb-0">
+                            <i class="bi bi-hourglass-split"></i>
+                            <strong>Waiting for data.</strong> Results will appear here after training completes.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs for Additional Info -->
+                <div class="card shadow-sm mt-4">
+                    <div class="card-header">
+                        <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="info-tab" data-bs-toggle="tab" data-bs-target="#info-content" role="tab">
+                                    <i class="bi bi-info-circle"></i> Info
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="docs-tab" data-bs-toggle="tab" data-bs-target="#docs-content" role="tab">
+                                    <i class="bi bi-book"></i> Documentation
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="api-tab" data-bs-toggle="tab" data-bs-target="#api-content" role="tab">
+                                    <i class="bi bi-api"></i> API Status
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="card-body">
+                        <div class="tab-content">
+                            <!-- Info Tab -->
+                            <div class="tab-pane fade show active" id="info-content" role="tabpanel">
+                                <h6>Application Info</h6>
+                                <ul class="small">
+                                    <li>Control Server: <code>localhost:3000</code></li>
+                                    <li>ML API Server: <code>localhost:8000</code></li>
+                                    <li>Framework: <strong>Bootstrap 5.3 + HTMX + Alpine.js</strong></li>
+                                    <li>Backend: <strong>FastAPI + Python</strong></li>
+                                </ul>
+                            </div>
+
+                            <!-- Docs Tab -->
+                            <div class="tab-pane fade" id="docs-content" role="tabpanel">
+                                <h6>Pipeline Steps</h6>
+                                <ol class="small">
+                                    <li><strong>Generate Features:</strong> Creates 30+ engineered features from sample data</li>
+                                    <li><strong>Generate Labels:</strong> Computes 20-day excess returns vs KOSPI benchmark</li>
+                                    <li><strong>Train Models:</strong> Trains HMM (regime detection) + Elastic Net classifier</li>
+                                    <li><strong>Generate Predictions:</strong> Generates predictions using trained models</li>
+                                    <li><strong>Start API:</strong> Serves predictions on port 8000</li>
+                                </ol>
+                            </div>
+
+                            <!-- API Tab -->
+                            <div class="tab-pane fade" id="api-content" role="tabpanel">
+                                <h6>API Endpoints</h6>
+                                <table class="table table-sm table-striped">
+                                    <tbody>
+                                        <tr>
+                                            <td><code>GET /v1/health</code></td>
+                                            <td>Health check</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>GET /v1/predictions</code></td>
+                                            <td>Get all predictions</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>GET /v1/predict?symbol=XXX</code></td>
+                                            <td>Get prediction for symbol</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>GET /v1/dates</code></td>
+                                            <td>List available dates</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-muted py-3 mt-5">
+        <div class="container-fluid">
+            <small class="d-block text-center">
+                📈 Stock Trading Quant Engine | Bootstrap 5.3 + HTMX + Alpine.js
+                <br>
+                <a href="https://getbootstrap.com" class="text-muted">Bootstrap</a> |
+                <a href="https://htmx.org" class="text-muted">HTMX</a> |
+                <a href="https://alpinejs.dev" class="text-muted">Alpine.js</a>
+            </small>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS Bundle (includes Popper) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- HTMX Latest -->
+    <script src="https://unpkg.com/htmx.org@latest"></script>
+
+    <!-- Alpine.js Latest -->
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+
+    <!-- Custom App JS -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

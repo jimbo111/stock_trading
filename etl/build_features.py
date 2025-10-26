@@ -88,8 +88,8 @@ def main():
     
     # Write to feature store
     store = FeatureStore(config['paths']['gold'])
-    
-    # Get latest date
+
+    # Use the max as_of_date from the features
     latest_date = features.index.get_level_values('as_of_date').max()
     store.write(features, latest_date.strftime('%Y-%m-%d'))
     

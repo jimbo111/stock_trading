@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import pickle
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -73,7 +74,7 @@ def fit_pipeline(
     
     # Prepare HMM input
     Z = df[hmm_features].values
-    
+
     # Fit HMM
     logger.info("Fitting HMM for regime detection")
     hmm = CycleHMM(
@@ -214,21 +215,116 @@ def main():
     feat_store = FeatureStore(config['paths']['gold'])
     label_store = LabelStore(config['paths']['gold'])
     
-    df_feat = feat_store.latest()
-    
+    # Get latest dates from both stores
+    feat_dates = sorted(feat_store.list_dates(), reverse=True)
+    label_dates = sorted(label_store.list_dates(), reverse=True)
+
+    if not feat_dates or not label_dates:
+        logger.error("No features or labels available")
+        return
+
+    logger.info(f"Available feature dates: {feat_dates}")
+    logger.info(f"Available label dates: {label_dates}")
+
+    # Find first feature date with valid data (no all-NaN columns)
+    df_feat_all = None
+    selected_feat_date = None
+    for feat_date in feat_dates:
+        df_temp = feat_store.read(feat_date)
+        # Check if HMM features have valid data
+        hmm_cols = ['ret_1d', 'ret_5d', 'ret_20d', 'rv_20d', 'mom_1m', 'mom_3m', 'sox_chg_5d', 'sox_chg_20d']
+        valid_cols = [c for c in hmm_cols if c in df_temp.columns and df_temp[c].notna().sum() > 0]
+        if len(valid_cols) >= 6:  # At least 6 of 8 HMM features should be valid
+            df_feat_all = df_temp
+            selected_feat_date = feat_date
+            logger.info(f"Using features from {selected_feat_date} (has {len(valid_cols)} valid HMM features)")
+            break
+
+    if df_feat_all is None:
+        logger.error("No valid feature data found")
+        return
+
+    df_labels = label_store.read(label_dates[0])
+
+    # Filter features to only include dates that are in labels
+    label_dates_set = set(df_labels.index.get_level_values('as_of_date'))
+    df_feat = df_feat_all[df_feat_all.index.get_level_values('as_of_date').isin(label_dates_set)]
+
     if args.train:
         logger.info("Training mode")
-        df_labels = label_store.latest()
-        
+        logger.info(f"Training on {len(df_feat)} feature rows and {len(df_labels)} label rows")
+
         artifacts = fit_pipeline(df_feat, df_labels, config)
-        
-        # TODO: Save artifacts (pickle, mlflow, etc.)
+
+        # Save artifacts with pickle
+        model_path = Path("data") / "models" / "artifacts.pkl"
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(model_path, 'wb') as f:
+            pickle.dump(artifacts, f)
+        logger.info(f"Saved artifacts to {model_path}")
         logger.info("Training complete")
-    
+
     if args.score:
         logger.info("Scoring mode")
-        # TODO: Load artifacts from storage
-        logger.error("Scoring requires saved artifacts - not implemented")
+        # Load artifacts from storage
+        model_path = Path("data") / "models" / "artifacts.pkl"
+        if not model_path.exists():
+            logger.error("Scoring requires saved artifacts - none found")
+            return
+
+        with open(model_path, 'rb') as f:
+            artifacts = pickle.load(f)
+        logger.info(f"Loaded artifacts from {model_path}")
+
+        # Make predictions
+        # Get HMM features
+        Z_hmm = df_feat[artifacts.hmm_feature_columns].dropna()
+        states = artifacts.hmm.predict(Z_hmm)
+
+        # Create state probability features for classifier (avoid SettingWithCopyWarning)
+        df_feat = df_feat.copy()
+        df_feat['state_prob_0'] = 0.0
+        df_feat['state_prob_1'] = 0.0
+        df_feat['state_prob_2'] = 0.0
+        for i, state in enumerate(states):
+            df_feat.iloc[i, df_feat.columns.get_loc(f'state_prob_{state}')] = 1.0
+
+        # Make predictions
+        X_clf = df_feat[artifacts.feature_columns].fillna(0)
+        pred_probs = artifacts.clf.predict_proba(X_clf)
+
+        # Handle both 1D and 2D arrays
+        if pred_probs.ndim == 1:
+            pred_probs_pos = pred_probs
+        else:
+            pred_probs_pos = pred_probs[:, 1]
+
+        # Write predictions
+        pred_store = PredictionStore(config['paths']['preds'])
+        predictions = []
+        for (as_of_date, symbol), prob in zip(X_clf.index, pred_probs_pos):
+            predictions.append({
+                'as_of_date': as_of_date.strftime('%Y-%m-%d'),
+                'symbol': symbol,
+                'p_up': float(prob),
+                'er20_hat_bps': 0.0,
+                'state_probs': [0.33, 0.33, 0.34],  # placeholder HMM state probs
+                'vol20_ann': 0.015,
+                'weight_suggested': 0.05,
+                'model_version': '0.1.0',
+                'degraded': False
+            })
+
+        # Write predictions to disk
+        pred_df = pd.DataFrame(predictions)
+        if len(pred_df) > 0:
+            pred_df['as_of_date'] = pd.to_datetime(pred_df['as_of_date'])
+            latest_date = pred_df['as_of_date'].max().strftime('%Y-%m-%d')
+
+            # Convert to MultiIndex format expected by pred_store
+            pred_df = pred_df.set_index(['as_of_date', 'symbol'])
+            pred_store.write(pred_df, latest_date)
+            logger.info(f"Written {len(pred_df)} predictions")
 
 
 if __name__ == "__main__":

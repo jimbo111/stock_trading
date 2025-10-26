@@ -82,13 +82,18 @@ class FeatureStore:
         return self.read(date)
 
     def list_dates(self) -> list[str]:
-        """List all available dates.
+        """List all available dates with features.
 
         Returns:
-            Sorted list of date strings
+            Sorted list of date strings that have features.parquet
         """
         partitions = sorted(self.root.glob("dt=*"))
-        return [p.name.replace("dt=", "") for p in partitions]
+        # Only return dates that actually have features.parquet
+        valid_dates = []
+        for p in partitions:
+            if (p / "features.parquet").exists():
+                valid_dates.append(p.name.replace("dt=", ""))
+        return valid_dates
 
     def read_range(self, start_date: str, end_date: str) -> pd.DataFrame:
         """Read features for a date range.

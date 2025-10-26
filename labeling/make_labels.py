@@ -131,12 +131,17 @@ def main():
     )
     
     logger.info(f"Label statistics:\n{labels.describe()}")
-    
+
+    # Check if labels are empty
+    if len(labels) == 0:
+        logger.warning("No labels generated. Data may be insufficient for the horizon period.")
+        return
+
     # Write to label store
     store = LabelStore(config['paths']['gold'])
     latest_date = labels.index.get_level_values('as_of_date').max()
     store.write(labels, latest_date.strftime('%Y-%m-%d'))
-    
+
     logger.info(f"Labels written to {config['paths']['gold']}")
 
 

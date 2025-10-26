@@ -82,10 +82,15 @@ class LabelStore:
         return self.read(date)
     
     def list_dates(self) -> list[str]:
-        """List all available dates.
-        
+        """List all available dates with labels.
+
         Returns:
-            Sorted list of date strings
+            Sorted list of date strings that have labels.parquet
         """
         partitions = sorted(self.root.glob("dt=*"))
-        return [p.name.replace("dt=", "") for p in partitions]
+        # Only return dates that actually have labels.parquet
+        valid_dates = []
+        for p in partitions:
+            if (p / "labels.parquet").exists():
+                valid_dates.append(p.name.replace("dt=", ""))
+        return valid_dates
