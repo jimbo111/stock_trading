@@ -542,5 +542,61 @@ pre code {
 }
 
 /* ============================================
+   Predictions Table Styles
+   ============================================ */
+
+#results-content .table {
+    font-size: 0.85rem;
+    margin-bottom: 0;
+}
+
+#results-content .table thead th {
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    border-bottom: 2px solid #dee2e6;
+}
+
+#results-content .table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+#results-content .table tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.1) !important;
+}
+
+#results-content .table-success {
+    background-color: rgba(25, 135, 84, 0.1);
+    border-left: 4px solid #198754;
+}
+
+#results-content .table-success:hover {
+    background-color: rgba(25, 135, 84, 0.15) !important;
+}
+
+#results-content .table-danger {
+    background-color: rgba(220, 53, 69, 0.1);
+    border-left: 4px solid #dc3545;
+}
+
+#results-content .table-danger:hover {
+    background-color: rgba(220, 53, 69, 0.15) !important;
+}
+
+#results-content .table-responsive {
+    animation: slideIn 0.3s ease;
+}
+
+#results-content .table strong {
+    color: var(--dark-color);
+    font-weight: 600;
+}
+
+#results-content .text-muted {
+    margin-top: 0.5rem;
+}
+
+/* ============================================
    End of Styles
    ============================================ */

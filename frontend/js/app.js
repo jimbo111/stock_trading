@@ -48,6 +48,9 @@ function app() {
             // Check API status on load
             await this.checkApiStatus();
 
+            // Try to load existing predictions
+            await this.loadPredictions();
+
             // Set up HTMX event listeners
             this.setupHTMXListeners();
 
@@ -158,6 +161,95 @@ function app() {
                 description,
                 'info'
             );
+        },
+
+        // ============================================
+        // Predictions Display Methods
+        // ============================================
+        async loadPredictions() {
+            try {
+                const response = await fetch('http://localhost:8000/v1/predictions', {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                if (!response.ok) {
+                    console.log('Predictions not available yet');
+                    return;
+                }
+
+                const data = await response.json();
+                this.displayPredictions(data);
+            } catch (error) {
+                console.log('Could not load predictions:', error.message);
+            }
+        },
+
+        displayPredictions(predictions) {
+            const resultsContent = document.getElementById('results-content');
+            if (!resultsContent) return;
+
+            if (!predictions || predictions.length === 0) {
+                resultsContent.innerHTML = `
+                    <div class="alert alert-secondary mb-0">
+                        <i class="bi bi-hourglass-split"></i>
+                        <strong>No predictions available yet.</strong>
+                    </div>
+                `;
+                return;
+            }
+
+            // Create table with predictions
+            let html = `
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Date</th>
+                                <th>P(Up)</th>
+                                <th>ER20 (bps)</th>
+                                <th>State Probs</th>
+                                <th>Vol (20d ann)</th>
+                                <th>Weight</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            // Show first 20 predictions
+            predictions.slice(0, 20).forEach(pred => {
+                const pUp = (parseFloat(pred.p_up) * 100).toFixed(2);
+                const stateProbs = pred.state_probs ? pred.state_probs.map(p => (p * 100).toFixed(0)).join('%,') + '%' : 'N/A';
+                const vol = (parseFloat(pred.vol20_ann) * 100).toFixed(2);
+                const weight = (parseFloat(pred.weight_suggested) * 100).toFixed(2);
+
+                const rowClass = parseFloat(pred.p_up) > 0.5 ? 'table-success' : 'table-danger';
+
+                html += `
+                    <tr class="${rowClass}">
+                        <td><strong>${pred.symbol}</strong></td>
+                        <td>${pred.as_of_date}</td>
+                        <td>${pUp}%</td>
+                        <td>${pred.er20_hat_bps.toFixed(1)}</td>
+                        <td><small>${stateProbs}</small></td>
+                        <td>${vol}%</td>
+                        <td>${weight}%</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+                <small class="text-muted d-block mt-2">
+                    Showing ${Math.min(20, predictions.length)} of ${predictions.length} predictions
+                </small>
+            `;
+
+            resultsContent.innerHTML = html;
+            console.log(`✅ Displayed ${predictions.length} predictions`);
         },
 
         // ============================================
