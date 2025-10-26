@@ -174,20 +174,28 @@ function app() {
         // ============================================
         async loadPredictions() {
             try {
+                console.log('📡 Fetching predictions from API...');
                 const response = await fetch('http://localhost:8000/v1/predictions', {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' }
                 });
 
                 if (!response.ok) {
-                    console.log('Predictions not available yet');
+                    console.log(`⚠️  API returned status ${response.status}`);
                     return;
                 }
 
                 const data = await response.json();
-                this.displayPredictions(data);
+                console.log('📊 API Response:', data);
+
+                // API returns { predictions: [...], count: X, as_of_date: "..." }
+                // Extract the predictions array
+                const predictions = Array.isArray(data) ? data : (data.predictions || []);
+                console.log(`✅ Extracted ${predictions.length} predictions from API`);
+
+                this.displayPredictions(predictions);
             } catch (error) {
-                console.log('Could not load predictions:', error.message);
+                console.error('❌ Error loading predictions:', error.message);
             }
         },
 
