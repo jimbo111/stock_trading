@@ -67,13 +67,31 @@ def fit_pipeline(
     df = df.dropna(subset=['y_class'])
     
     logger.info(f"Training on {len(df)} samples")
-    
+
     # Select HMM features
     hmm_features = select_hmm_features(df_feat)
-    logger.info(f"HMM features: {hmm_features}")
-    
-    # Prepare HMM input
-    Z = df[hmm_features].values
+    logger.info(f"HMM features (initial): {hmm_features}")
+
+    # Filter to features with sufficient non-null values
+    hmm_features_valid = []
+    for feat in hmm_features:
+        if feat in df.columns:
+            non_null_count = df[feat].notna().sum()
+            if non_null_count >= 50:  # At least 50 valid samples
+                hmm_features_valid.append(feat)
+            else:
+                logger.warning(f"Excluding {feat} from HMM (only {non_null_count} non-null values)")
+
+    if len(hmm_features_valid) < 3:
+        raise ValueError(f"Insufficient HMM features with valid data: only {len(hmm_features_valid)} features available")
+
+    hmm_features = hmm_features_valid
+    logger.info(f"HMM features (filtered): {hmm_features}")
+
+    # Prepare HMM input - drop rows with any NaN in HMM features
+    Z_hmm = df[hmm_features].dropna()
+    Z = Z_hmm.values
+    logger.info(f"HMM input: {Z.shape[0]} samples with {Z.shape[1]} features")
 
     # Fit HMM
     logger.info("Fitting HMM for regime detection")
@@ -82,21 +100,33 @@ def fit_pipeline(
         cov_type=config['hmm']['cov_type']
     )
     hmm.fit(Z)
-    
-    # Get state probabilities
+
+    # Get state probabilities for the valid indices
     state_probs = hmm.transform(Z)
-    
-    # Add state probabilities as features
+
+    # Initialize state probability columns with NaN
     for i in range(config['hmm']['n_states']):
-        df[f'state_prob_{i}'] = state_probs[:, i]
+        df[f'state_prob_{i}'] = np.nan
+
+    # Assign state probabilities to the valid indices
+    for i in range(config['hmm']['n_states']):
+        df.loc[Z_hmm.index, f'state_prob_{i}'] = state_probs[:, i]
     
     # Prepare classifier features (original + state probs)
     feature_cols = [c for c in df_feat.columns if not c.endswith('_missing')]
     feature_cols += [f'state_prob_{i}' for i in range(config['hmm']['n_states'])]
-    
-    X = df[feature_cols].values
-    y = df['y_class'].values
-    
+
+    # Drop rows with missing state probabilities
+    df_train = df.dropna(subset=[f'state_prob_{i}' for i in range(config['hmm']['n_states'])])
+    logger.info(f"After filtering for valid HMM states: {len(df_train)} samples")
+
+    if len(df_train) < 50:
+        raise ValueError(f"Insufficient training samples after HMM filtering: {len(df_train)}")
+
+    # Fill NaN values with 0 for features (conservative approach)
+    X = df_train[feature_cols].fillna(0).values
+    y = df_train['y_class'].values
+
     # Purged K-Fold cross-validation for OOF scores
     logger.info("Performing purged K-Fold CV for calibration")
     cv = PurgedKFold(
@@ -104,20 +134,20 @@ def fit_pipeline(
         horizon=config['horizon_days'],
         embargo=config['embargo_days']
     )
-    
-    oof_scores = np.full(len(df), np.nan)
+
+    oof_scores = np.full(len(df_train), np.nan)
     oof_y = y.copy()
-    
-    for fold, (train_idx, val_idx) in enumerate(cv.split(df)):
+
+    for fold, (train_idx, val_idx) in enumerate(cv.split(df_train)):
         logger.info(f"Fold {fold + 1}/5: train={len(train_idx)}, val={len(val_idx)}")
-        
+
         X_train, X_val = X[train_idx], X[val_idx]
         y_train = y[train_idx]
-        
+
         # Fit fold classifier
         fold_clf = EnetClassifier(C=1.0, l1_ratio=0.3)
         fold_clf.fit(X_train, y_train)
-        
+
         # Predict on validation
         oof_scores[val_idx] = fold_clf.predict_proba(X_val)
     
@@ -146,46 +176,54 @@ def score_pipeline(
     df_feat_today: pd.DataFrame
 ) -> pd.DataFrame:
     """Score today's features with trained pipeline.
-    
+
     Args:
         art: Trained model artifacts
         df_feat_today: Today's features (MultiIndex [as_of_date, symbol])
-        
+
     Returns:
         DataFrame with predictions: [p_up, state_prob_*, ...]
     """
     logger.info("Scoring pipeline")
-    
-    # Get HMM state probabilities
-    Z = df_feat_today[art.hmm_feature_columns].values
-    state_probs = art.hmm.transform(Z)
-    
-    # Add state probs to features
+
+    # Initialize results DataFrame
+    results = pd.DataFrame(index=df_feat_today.index)
+
+    # Handle HMM features with NaN
+    # Only compute state probs for rows with valid HMM features
+    df_hmm_valid = df_feat_today[art.hmm_feature_columns].dropna()
+
+    # Initialize state prob columns with NaN
+    n_states = art.hmm.n_states
+    for i in range(n_states):
+        results[f'state_prob_{i}'] = np.nan
+
+    # Compute state probs for valid rows only
+    if len(df_hmm_valid) > 0:
+        Z_valid = df_hmm_valid.values
+        state_probs_valid = art.hmm.transform(Z_valid)
+
+        # Assign to valid indices
+        for i in range(n_states):
+            results.loc[df_hmm_valid.index, f'state_prob_{i}'] = state_probs_valid[:, i]
+
+    # Prepare features for classifier
     df_with_states = df_feat_today.copy()
-    for i in range(state_probs.shape[1]):
-        df_with_states[f'state_prob_{i}'] = state_probs[:, i]
-    
-    # Prepare classifier input
-    X = df_with_states[art.feature_columns].values
-    
-    # Predict
+    for i in range(n_states):
+        df_with_states[f'state_prob_{i}'] = results[f'state_prob_{i}']
+
+    # Fill NaN with 0 and predict
+    X = df_with_states[art.feature_columns].fillna(0).values
     p_up = art.clf.predict_proba(X)
-    
-    # Build results DataFrame
-    results = pd.DataFrame({
-        'p_up': p_up
-    }, index=df_feat_today.index)
-    
-    # Add state probabilities
-    for i in range(state_probs.shape[1]):
-        results[f'state_prob_{i}'] = state_probs[:, i]
-    
+
+    results['p_up'] = p_up
+
     # Add volatility for position sizing
     if 'rv_20d' in df_feat_today.columns:
         results['vol20_ann'] = df_feat_today['rv_20d']
-    
-    logger.info(f"Generated predictions for {len(results)} symbols")
-    
+
+    logger.info(f"Generated predictions for {len(results)} symbols ({len(df_hmm_valid)} with valid HMM states)")
+
     return results
 
 
@@ -276,41 +314,39 @@ def main():
             artifacts = pickle.load(f)
         logger.info(f"Loaded artifacts from {model_path}")
 
-        # Make predictions
-        # Get HMM features
-        Z_hmm = df_feat[artifacts.hmm_feature_columns].dropna()
-        states = artifacts.hmm.predict(Z_hmm)
-
-        # Create state probability features for classifier (avoid SettingWithCopyWarning)
-        df_feat = df_feat.copy()
-        df_feat['state_prob_0'] = 0.0
-        df_feat['state_prob_1'] = 0.0
-        df_feat['state_prob_2'] = 0.0
-        for i, state in enumerate(states):
-            df_feat.iloc[i, df_feat.columns.get_loc(f'state_prob_{state}')] = 1.0
-
-        # Make predictions
-        X_clf = df_feat[artifacts.feature_columns].fillna(0)
-        pred_probs = artifacts.clf.predict_proba(X_clf)
-
-        # Handle both 1D and 2D arrays
-        if pred_probs.ndim == 1:
-            pred_probs_pos = pred_probs
-        else:
-            pred_probs_pos = pred_probs[:, 1]
+        # Use the proper score_pipeline function
+        results_df = score_pipeline(artifacts, df_feat_all)
 
         # Write predictions
         pred_store = PredictionStore(config['paths']['preds'])
         predictions = []
-        for (as_of_date, symbol), prob in zip(X_clf.index, pred_probs_pos):
+
+        for (as_of_date, symbol), row in results_df.iterrows():
+            # Extract state probabilities
+            n_states = config['hmm']['n_states']
+            state_probs = [float(row.get(f'state_prob_{i}', 0.0)) for i in range(n_states)]
+
+            # Get volatility for position sizing
+            vol20_ann = float(row.get('vol20_ann', 0.015))
+
+            # Simple position sizing: inverse volatility scaling
+            base_weight = 0.10  # 10% base allocation
+            weight_suggested = base_weight * (0.015 / max(vol20_ann, 0.001))
+            weight_suggested = min(weight_suggested, 0.20)  # Cap at 20%
+
+            # Estimate expected excess return in bps
+            # Rough heuristic: p_up maps to expected return
+            p_up = float(row['p_up'])
+            er20_hat_bps = (p_up - 0.5) * 200  # ±100 bps for ±50% prob
+
             predictions.append({
                 'as_of_date': as_of_date.strftime('%Y-%m-%d'),
                 'symbol': symbol,
-                'p_up': float(prob),
-                'er20_hat_bps': 0.0,
-                'state_probs': [0.33, 0.33, 0.34],  # placeholder HMM state probs
-                'vol20_ann': 0.015,
-                'weight_suggested': 0.05,
+                'p_up': p_up,
+                'er20_hat_bps': er20_hat_bps,
+                'state_probs': state_probs,
+                'vol20_ann': vol20_ann,
+                'weight_suggested': weight_suggested,
                 'model_version': '0.1.0',
                 'degraded': False
             })
@@ -324,7 +360,7 @@ def main():
             # Convert to MultiIndex format expected by pred_store
             pred_df = pred_df.set_index(['as_of_date', 'symbol'])
             pred_store.write(pred_df, latest_date)
-            logger.info(f"Written {len(pred_df)} predictions")
+            logger.info(f"Written {len(pred_df)} predictions for {latest_date}")
 
 
 if __name__ == "__main__":

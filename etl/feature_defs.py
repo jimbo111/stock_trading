@@ -243,19 +243,27 @@ def expand_exports_with_decay(df_exports: pd.DataFrame,
 def zscore_features(df: pd.DataFrame, window_min: int = 252) -> pd.DataFrame:
     """Z-score features using expanding window up to t-1."""
     result = pd.DataFrame(index=df.index)
-    
+
+    # Determine actual min_periods based on available data
+    max_per_symbol = df.groupby(level='symbol').size().max()
+    effective_window_min = min(window_min, max(20, max_per_symbol // 2))
+
+    if effective_window_min < window_min:
+        # Not enough data for desired window, use what we have
+        effective_window_min = max(20, effective_window_min)
+
     for col in df.columns:
         if df[col].dtype in [np.float64, np.float32, np.int64, np.int32]:
             # Expanding window z-score
-            expanding = df.groupby(level='symbol')[col].expanding(min_periods=window_min)
+            expanding = df.groupby(level='symbol')[col].expanding(min_periods=effective_window_min)
             mean = expanding.mean().droplevel(0).shift(1)  # Shift to avoid leakage
             std = expanding.std().droplevel(0).shift(1)
-            
+
             result[col] = (df[col] - mean) / (std + 1e-8)
-            
+
             # Add missing flag
             result[f'{col}_missing'] = df[col].isna().astype(int)
-    
+
     return result
 
 
