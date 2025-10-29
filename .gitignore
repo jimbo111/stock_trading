@@ -57,12 +57,33 @@ ipython_config.py
 
 # Environments
 .env
+.env.*
+.env.local
+.env.production
+.env.staging
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Security & Credentials
+*.key
+*.pem
+*.cer
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials/
+**/secrets/
+**/credentials/
+*secret*
+*credential*
+*.token
+auth.json
+config.json
 
 # IDEs
 .vscode/

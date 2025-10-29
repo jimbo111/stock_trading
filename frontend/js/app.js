@@ -20,7 +20,7 @@ function app() {
             0: { name: 'Idle', icon: '⏸️', color: 'secondary' },
             1: { name: 'Generate Features', icon: '⚡', color: 'info' },
             2: { name: 'Generate Labels', icon: '🏷️', color: 'info' },
-            3: { name: 'Train Models', icon: '🤖', color: 'info' },
+            3: { name: 'Train Models', icon: '📊', color: 'info' },
             4: { name: 'Generate Predictions', icon: '🎯', color: 'info' },
             5: { name: 'Start API', icon: '🚀', color: 'success' }
         },

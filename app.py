@@ -175,7 +175,7 @@ async def train_models(background_tasks: BackgroundTasks):
     Train HMM + Elastic Net models
     Step 3 of the pipeline
     """
-    logger.info("🤖 Starting model training...")
+    logger.info("Starting model training...")
 
     def run_training():
         try:
@@ -200,7 +200,7 @@ async def train_models(background_tasks: BackgroundTasks):
     return {
         "step": 3,
         "status": "started",
-        "message": "🤖 Model training started in background...",
+        "message": "Model training started in background...",
         "details": "Training HMM (regime detection) + Elastic Net classifier"
     }
 
