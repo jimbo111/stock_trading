@@ -104,7 +104,8 @@ def compute_beta(df_stock: pd.DataFrame, df_benchmark: pd.DataFrame,
         rolling_cov = roll['s'].cov(combined['b'])  # Series on DatetimeIndex
         rolling_var = roll['b'].var()
 
-        beta_vals = rolling_cov / rolling_var
+        # Guard against zero variance (e.g. benchmark halt) → NaN instead of inf
+        beta_vals = rolling_cov / rolling_var.replace(0, np.nan)
 
         # Restore the original MultiIndex so that pd.concat produces a
         # consistent [as_of_date, symbol] MultiIndex across all symbols.
@@ -356,9 +357,10 @@ def compute_features(
     Returns:
         DataFrame with all engineered features, indexed by [as_of_date, symbol]
     """
-    # Ensure proper MultiIndex
+    # Ensure proper MultiIndex, sorted for correct rolling window computation
     if not isinstance(df_prices.index, pd.MultiIndex):
         df_prices = df_prices.set_index(['as_of_date', 'symbol'])
+    df_prices = df_prices.sort_index()
     
     features_list = []
     

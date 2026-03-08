@@ -348,6 +348,11 @@ def main():
         for (as_of_date, symbol), row in results_df.iterrows():
             # Extract state probabilities
             n_states = config['hmm']['n_states']
+            # Check if this row has valid HMM state assignments
+            has_valid_states = all(
+                not pd.isna(row.get(f'state_prob_{i}', np.nan))
+                for i in range(n_states)
+            )
             state_probs = [
                 float(row.get(f'state_prob_{i}', 0.0)) if not pd.isna(row.get(f'state_prob_{i}', 0.0)) else 0.0
                 for i in range(n_states)
@@ -385,7 +390,7 @@ def main():
                 'vol20_ann': vol20_ann,
                 'weight_suggested': weight_suggested,
                 'model_version': '0.1.0',
-                'degraded': False
+                'degraded': not has_valid_states
             })
 
         # Write predictions to disk

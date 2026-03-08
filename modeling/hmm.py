@@ -121,7 +121,7 @@ class CycleHMM:
             try:
                 candidate.fit(X_scaled)
                 score = candidate.score(X_scaled)
-            except Exception:
+            except (ValueError, np.linalg.LinAlgError):
                 # Degenerate covariance or numerical error — skip this seed
                 continue
 

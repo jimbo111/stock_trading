@@ -135,6 +135,11 @@ class PurgedKFold:
 
             # Skip fold if either set is too small
             if len(train_indices) < self.min_train_periods or len(val_indices) < 1:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Skipping fold {fold}: train={len(train_indices)} "
+                    f"(min={self.min_train_periods}), val={len(val_indices)}"
+                )
                 continue
 
             yield train_indices, val_indices

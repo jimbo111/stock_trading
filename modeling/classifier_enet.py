@@ -107,15 +107,16 @@ class EnetClassifier:
         # Apply the same scaling fitted during training
         X_scaled = self.scaler.transform(X[mask])
 
-        # Get raw scores
+        # Get raw logit scores and convert to probabilities via sigmoid
         raw = self.clf.decision_function(X_scaled)
-        
-        # Apply calibration if available
+        sigmoid = 1 / (1 + np.exp(-raw))
+
+        # Apply calibration if available — isotonic was trained on sigmoid
+        # outputs from OOF predictions, so we must pass sigmoid here too
         if self.cal is not None:
-            probs[mask] = self.cal.transform(raw)
+            probs[mask] = self.cal.transform(sigmoid)
         else:
-            # Fallback to logistic link
-            probs[mask] = 1 / (1 + np.exp(-raw))
+            probs[mask] = sigmoid
         
         return probs
     
