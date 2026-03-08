@@ -1,549 +1,217 @@
-# Korean Semiconductors Alpha Engine
+# Korean Semiconductors Quant Engine
 
-**Starter repository skeleton for predicting 20-day excess returns of Samsung (005930.KS), SK hynix (000660.KS), and peers.**
-
-This skeleton is opinionated, leakage-safe, and production-friendly. It combines Hidden Markov Models (HMM) for regime detection with calibrated Elastic Net classifiers for directional prediction.
+Quantitative trading system for predicting 20-day excess returns of Samsung (005930.KS) and SK hynix (000660.KS) against KOSPI. Combines Hidden Markov Models for regime detection with calibrated Elastic Net classifiers for directional prediction.
 
 ## Quickstart
 
 ```bash
-# 1) Clone and setup
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 pre-commit install
 
-# 2) Run unit tests
-pytest -q
-
-# 3) Generate features & labels from samples
+# Run with sample data
 make sample-backtest
 
-# 4) Launch API (serves cached predictions)
-make run-api
-# -> http://127.0.0.1:8000/docs
+# Launch dashboard
+uvicorn app:app --reload --port 3000
+
+# Launch ML API
+make run-api  # http://127.0.0.1:8000/docs
 ```
 
-**Requirements:** Python 3.11+ • OS: Linux/macOS • Style: black + ruff
+**Requirements:** Python 3.11+ | macOS/Linux | black + ruff
 
----
+## Tech Stack
 
-## What This Repo Provides
+| Layer | Technology |
+|-------|-----------|
+| ML / Stats | scikit-learn, hmmlearn, numpy, pandas |
+| Data | yfinance, Parquet stores, JSON schema validation |
+| API | FastAPI, Pydantic, Uvicorn |
+| Dashboard | Bootstrap 5.3, HTMX, Alpine.js |
+| Dev Tools | pytest, black, ruff, pre-commit |
 
-### Core Functionality
-
-1. **Feature Engineering** (`etl/`)
-
-   - Return & momentum indicators (1d, 5d, 20d, 1m-12m)
-   - Volatility & risk metrics (realized vol, beta, idiosyncratic vol, drawdown)
-   - FX features (USD/KRW changes)
-   - Industry indicators (DRAM/NAND/HBM prices, SOX index)
-   - Flow data (KRX foreign net flows)
-   - Macro expanders (Korea exports with exponential decay)
-   - All features z-scored with expanding window (t-1) to prevent leakage
-
-2. **Label Generation** (`labeling/`)
-
-   - 20-day forward excess returns vs KOSPI benchmark
-   - Binary classification target (positive/negative ER)
-   - Proper forward-looking alignment with no leakage
-
-3. **Modeling** (`modeling/`)
-
-   - **HMM (Gaussian, 3-state):** Detects market regimes (bear/neutral/bull)
-   - **Elastic Net Classifier:** L1+L2 regularized logistic regression
-   - **Isotonic Calibration:** Out-of-fold calibration for reliable probabilities
-   - **Purged K-Fold CV:** Prevents label overlap leakage (Lopez de Prado)
-
-4. **Backtest Engine** (`backtest/`)
-
-   - Event-driven daily simulation
-   - Kelly criterion position sizing with vol scaling
-   - Commission & slippage models
-   - Performance metrics (IR, hit rate, turnover, drawdown)
-
-5. **API** (`api/`)
-
-   - FastAPI REST endpoints
-   - Serves latest predictions with model version tracking
-   - Degradation flags for stale data
-   - OpenAPI/Swagger docs at `/docs`
-
-6. **Data Infrastructure** (`stores/`)
-   - Parquet-based feature/label/prediction stores
-   - Date-partitioned storage for efficient access
-   - Schema validation via JSON contracts
-
----
-
-## Architecture Overview
+## Architecture
 
 ```
-Raw Data Sources → ETL Pipeline → Feature Store (Parquet)
-                                       ↓
-                    Labels ← Label Generator (20D ER)
-                       ↓
-           Purged CV Training → HMM + Classifier
-                       ↓
-              Model Artifacts (MLflow)
-                       ↓
-         Daily Scoring → Prediction Store → API
-                       ↓
-              Backtest Engine → Reports
+Raw Data (5 sources) → ETL Pipeline → Feature Store (Parquet)
+                                            ↓
+                         Labels ← Label Generator (20D excess return)
+                            ↓
+                Purged K-Fold CV → HMM + Elastic Net Classifier
+                            ↓
+                   Model Artifacts → Daily Scoring
+                            ↓
+                  Prediction Store → FastAPI REST API
+                            ↓
+                     Web Dashboard (Bootstrap + HTMX)
 ```
 
-**Key Design Principles:**
+## Feature Engineering
 
-- **No lookahead bias:** All features use t-1 windows
-- **No label leakage:** Purged CV with embargo
-- **Production-ready:** Modular, typed, tested, logged
-- **Schema contracts:** All data validated against JSON schemas
+**30+ features** across 8 categories, all z-scored with expanding window (t-1) to prevent lookahead bias:
 
----
+- **Returns & Momentum** — 1d, 5d, 20d returns; 1m–12m momentum with 5-day skip
+- **Volatility & Risk** — 20-day realized vol, 60-day drawdown, beta, idiosyncratic vol
+- **Currency** — USD/KRW changes at 1d, 5d, 20d horizons
+- **Semiconductors** — DRAM/NAND spot prices, SOX index changes
+- **Flow Data** — KRX foreign net flows normalized by ADV
+- **Macro** — Korea semiconductor exports with exponential decay (20-day half-life)
+- **Missing Indicators** — Binary flags for NaN-status of each feature
+
+## Modeling
+
+### HMM Regime Detection
+- 3-state Gaussian HMM identifies bear/neutral/bull market regimes
+- Fitted on 8 technical features (returns, volatility, momentum, SOX)
+- Outputs soft state probabilities that augment the classifier's feature set
+
+### Elastic Net Classifier
+- L1+L2 regularized logistic regression (C=1.0, l1_ratio=0.3, saga solver)
+- **Isotonic calibration** on out-of-fold scores for reliable probability estimates
+- Features: original 30+ engineered features + 3 HMM state probabilities
+
+### Leakage Prevention
+- **Purged K-Fold CV** (Lopez de Prado) — 5-fold with 20-day horizon purge + 20-day embargo
+- **Expanding window z-scores** — each date normalized using only t-1 data
+- **Forward-looking labels** — 20-day excess returns with proper alignment
+
+## API Endpoints
+
+```
+GET  /v1/health                           → { status, version }
+GET  /v1/predict?symbol=005930.KS         → single prediction
+GET  /v1/predictions?as_of_date=YYYY-MM-DD → all predictions for date
+GET  /v1/dates                            → available prediction dates
+GET  /docs                                → Swagger/OpenAPI UI
+```
+
+**Prediction response:**
+```json
+{
+  "symbol": "005930.KS",
+  "as_of_date": "2025-01-15",
+  "p_up": 0.62,
+  "er20_hat_bps": 24.0,
+  "state_probs": [0.15, 0.55, 0.30],
+  "vol20_ann": 0.28,
+  "weight_suggested": 0.045,
+  "model_version": "0.1.0",
+  "degraded": false
+}
+```
+
+## Web Dashboard
+
+Control server at `http://localhost:3000` with 5 pipeline buttons:
+
+1. **Build Features** — runs ETL pipeline, stores to Parquet
+2. **Generate Labels** — computes 20-day forward excess returns
+3. **Train Model** — HMM + classifier with purged CV
+4. **Score** — generates predictions for latest date
+5. **Start API** — launches ML API on port 8000
+
+Built with Bootstrap 5.3 + HTMX for background requests + Alpine.js for reactive status updates.
 
 ## Repository Structure
 
 ```
-semis-alpha-starter/
-├─ api/                  # FastAPI application
-├─ backtest/             # Backtesting engine
-├─ config/               # YAML configuration
-├─ data_contracts/       # JSON schemas for validation
-├─ etl/                  # Data ingestion & features
-├─ labeling/             # Label generation
-├─ modeling/             # HMM + classifier + pipeline
-├─ schedules/            # Airflow DAGs (placeholder)
-├─ stores/               # Parquet-based data stores
-├─ utils/                # Calendar, CV, I/O, logging
-├─ samples/              # Sample CSV data for testing
-├─ tests/                # Pytest unit tests
-└─ data/                 # Runtime data (gitignored)
-   ├─ bronze/            # Raw ingested data
-   ├─ silver/            # Cleaned data
-   ├─ gold/              # Features & labels
-   └─ preds/             # Model predictions
+stock_trading/
+├── api/                    # FastAPI REST application
+│   ├── main.py             # Endpoints + CORS + error handling
+│   └── schemas.py          # Pydantic request/response models
+├── app.py                  # Dashboard control server (port 3000)
+├── backtest/               # Backtesting engine (WIP)
+├── config/
+│   └── default.yaml        # Central configuration (symbols, params, paths)
+├── data_contracts/         # JSON schemas for data validation
+├── etl/
+│   ├── feature_defs.py     # 30+ feature definitions (359 lines)
+│   └── build_features.py   # Pipeline entry point
+├── frontend/               # Dashboard UI (Bootstrap + HTMX + Alpine.js)
+├── labeling/
+│   └── make_labels.py      # 20-day excess return labels
+├── modeling/
+│   ├── hmm.py              # 3-state Gaussian HMM
+│   ├── classifier_enet.py  # Elastic Net with isotonic calibration
+│   └── pipeline.py         # Training + scoring orchestration
+├── samples/data/           # Sample CSVs for testing without external data
+├── stores/                 # Parquet-based feature/label/prediction stores
+├── tests/                  # pytest (CV, labels, HMM)
+└── utils/                  # Calendar, purged CV, I/O, logging, timezones
 ```
-
----
 
 ## Configuration
 
-Edit `config/default.yaml`:
+`config/default.yaml`:
 
 ```yaml
-symbols: ["005930.KS", "000660.KS"] # Samsung, SK hynix
-horizon_days: 20 # Prediction horizon
-kelly_frac: 0.25 # Kelly fraction for sizing
-weight_max: 0.05 # Max position size
-commission_bps: 2 # Transaction cost
-embargo_days: 20 # CV embargo period
+symbols: ["005930.KS", "000660.KS"]  # Samsung, SK hynix
+horizon_days: 20                      # Prediction horizon
+kelly_frac: 0.25                      # Kelly fraction for sizing
+weight_max: 0.05                      # Max position size
+commission_bps: 2                     # Transaction cost
+embargo_days: 20                      # CV embargo period
+hmm:
+  n_states: 3
+  cov_type: "full"
+model:
+  C: 1.0
+  l1_ratio: 0.3
 ```
-
----
-
-## Usage
-
-### 1. Generate Features
-
-```bash
-# Using sample data
-python etl/build_features.py --use-samples
-
-# Production (implement data providers first)
-python etl/build_features.py --start-date 2020-01-01 --end-date 2025-10-24
-```
-
-**Output:** Features stored in `data/gold/dt=YYYY-MM-DD/features.parquet`
-
-### 2. Generate Labels
-
-```bash
-python labeling/make_labels.py --use-samples
-```
-
-**Output:** Labels (er20, y_class) in `data/gold/dt=YYYY-MM-DD/labels.parquet`
-
-### 3. Train Models
-
-```bash
-python modeling/pipeline.py --train --use-samples
-```
-
-**Process:**
-
-1. Merges features + labels
-2. Fits 3-state Gaussian HMM on selected features
-3. Augments features with HMM state probabilities
-4. Trains Elastic Net classifier with purged 5-fold CV
-5. Calibrates predictions using isotonic regression on OOF scores
-
-**Output:** Trained artifacts (currently in-memory; implement serialization)
-
-### 4. Run Backtest
-
-```bash
-# TODO: Implement backtest/engine.py
-python backtest/engine.py --use-samples --report ./reports/sample
-```
-
-### 5. Serve API
-
-```bash
-make run-api
-# or
-uvicorn api.main:app --reload --port 8000
-```
-
-**Endpoints:**
-
-- `GET /v1/health` - Health check
-- `GET /v1/predict?symbol=005930.KS` - Single prediction
-- `GET /v1/predictions` - All latest predictions
-- `GET /v1/dates` - List available dates
-
-**Example:**
-
-```bash
-curl "http://localhost:8000/v1/predict?symbol=005930.KS"
-```
-
----
 
 ## Testing
 
 ```bash
-# Run all tests
-pytest -v
-
-# Run specific test file
-pytest tests/test_cv.py -v
-
-# With coverage
-pytest --cov=. --cov-report=html
+pytest -v                        # Run all tests
+pytest --cov=. --cov-report=html # With coverage report
 ```
 
-**Test Coverage:**
-
-- Purged K-Fold CV
-- Label generation
-- ✅ HMM fitting/transforming
-- ⚠️ Feature engineering (partial)
-- ⚠️ Backtest engine (TODO)
-- ⚠️ API endpoints (TODO)
-
----
-
-## Known Issues & Future Work
-
-### Critical Implementation Gaps
-
-1. **Data Provider Integration**
-
-   - ❌ `etl/ingest_*.py` modules are **stubs only**
-   - ❌ No real market data connectors (Yahoo Finance, Bloomberg, etc.)
-   - ❌ No vendor API key management
-   - **Action Required:** Implement actual data fetching in ETL modules
-
-2. **Model Persistence**
-
-   - ❌ Trained models not saved to disk
-   - ❌ No MLflow integration for experiment tracking
-   - ❌ No model versioning or registry
-   - **Action Required:** Add serialization in `modeling/pipeline.py`
-
-3. **Backtest Engine**
-
-   - ⚠️ `backtest/engine.py` is **incomplete**
-   - ❌ Missing daily rebalancing logic
-   - ❌ Cost models not fully implemented
-   - ❌ Metrics calculation incomplete
-   - **Action Required:** Implement `run_backtest()` function
-
-4. **Feature Engineering Edge Cases**
-
-   - ⚠️ Beta calculation simplified (may have alignment issues)
-   - ⚠️ Idiosyncratic volatility needs validation
-   - ⚠️ Export decay formula assumes monthly data
-   - **Action Required:** Validate with real data and adjust
-
-5. **Calendar Handling**
-   - ⚠️ KRX holiday list is **hardcoded and incomplete**
-   - ❌ No dynamic holiday calendar updates
-   - **Action Required:** Integrate with proper KRX calendar provider
-
-### Data Quality Concerns
-
-1. **Schema Validation**
-
-   - ⚠️ JSON schema validation is basic
-   - ❌ No automated data quality checks in pipeline
-   - **Action Required:** Implement `etl/quality.py` with comprehensive checks
-
-2. **Missing Data Handling**
-
-   - ⚠️ Forward-fill assumptions may be naive
-   - ⚠️ Z-score calculation with sparse data untested
-   - **Action Required:** Add robust imputation strategies
-
-3. **Time Zone Handling**
-   - ⚠️ KST-UTC conversion needs thorough testing
-   - ⚠️ Potential for midnight boundary issues
-   - **Action Required:** Add integration tests for timezone edge cases
-
-### Performance & Scalability
-
-1. **Feature Computation**
-
-   - ⚠️ Not optimized for large datasets
-   - ❌ No parallelization
-   - ❌ No incremental feature updates
-   - **Action Required:** Consider Dask/Ray for scaling
-
-2. **Cross-Validation**
-
-   - ⚠️ Purged CV can be slow with many folds
-   - **Action Required:** Profile and optimize if needed
-
-3. **API Performance**
-   - ❌ No caching layer (Redis)
-   - ❌ No rate limiting
-   - **Action Required:** Add Redis for hot predictions
-
-### Production Readiness
-
-1. **Monitoring & Alerting**
-
-   - ❌ No model performance monitoring
-   - ❌ No data drift detection
-   - ❌ No automated retraining triggers
-   - **Action Required:** Implement monitoring stack
-
-2. **Security**
-
-   - ❌ API has no authentication
-   - ❌ Secrets not managed (see `.env.example`)
-   - **Action Required:** Add OAuth2/API keys, use secret manager
-
-3. **Deployment**
-
-   - ⚠️ Dockerfile is placeholder only
-   - ❌ No CI/CD pipeline
-   - ❌ No infrastructure-as-code
-   - **Action Required:** Complete Docker setup, add GitHub Actions
-
-4. **Scheduling**
-   - ⚠️ `schedules/airflow_dags.py` is **stub only**
-   - ❌ No actual DAG implementation
-   - **Action Required:** Implement daily ETL and weekly retrain DAGs
-
-### Model Improvements
-
-1. **Feature Selection**
-
-   - ⚠️ Current features are standard; not optimized
-   - **Consider:** Add alternative data (sentiment, options flow, analyst estimates)
-
-2. **Model Ensemble**
-
-   - ⚠️ Single model architecture
-   - **Consider:** Add LGBM regressor, LSTM for time-series, ensemble methods
-
-3. **Risk Management**
-   - ⚠️ Basic Kelly sizing only
-   - **Consider:** Add EGARCH volatility forecasting, cointegration sleeves
-
----
-
-## Security Notes
-
-**Never commit:**
-
-- API keys (use `.env` file, see `.env.example`)
-- Database credentials
-- Model artifacts (large files → use DVC or MLflow artifact store)
-
-**Recommended:**
-
-- Use secret manager (AWS Secrets Manager, Azure Key Vault)
-- Rotate keys regularly
-- Audit data access logs
-
----
+**Current coverage (~60%):**
+- Purged K-Fold CV validation
+- Label generation + edge cases
+- HMM fitting and transform
 
 ## Expected Performance
 
-**Note:** Performance depends heavily on:
+| Metric | Target Range |
+|--------|-------------|
+| Information Ratio | 0.5 – 1.5 |
+| Hit Rate | 52 – 58% |
+| Annualized Turnover | 100 – 200% |
+| Max Drawdown | 10 – 20% |
 
-- Quality of input data
-- Market regime (works better in trending markets)
-- Parameter tuning
-- Transaction costs
+Performance depends on data quality, market regime, and parameter tuning. Always paper trade first.
 
-**Typical Metrics (Backtested):**
+## Key Design Decisions
 
-- Information Ratio: 0.5 - 1.5 (target)
-- Hit Rate: 52-58% (modest edge)
-- Annualized Turnover: 100-200%
-- Max Drawdown: 10-20%
+- **Purged CV over time-series split** — prevents label leakage while maximizing data usage
+- **HMM + classifier** — regime-aware predictions outperform static models in regime-shifting markets
+- **Isotonic calibration** — ensures probability estimates match empirical frequencies
+- **Parquet + JSON dual storage** — Parquet for analysis, JSON for API responses
+- **Sample data included** — enables instant testing without external data sources
 
-**⚠️ Past performance doesn't guarantee future results. Always paper trade first.**
+## Development
 
----
+```bash
+black .            # Format
+ruff check . --fix # Lint
+pytest -v          # Test
+```
 
-## Development Workflow
+Pre-commit hooks auto-run black + ruff on every commit.
 
-1. **Feature Branch**
+## References
 
-   ```bash
-   git checkout -b feature/your-feature
-   ```
-
-2. **Make Changes**
-
-   - Write code
-   - Add tests
-   - Update documentation
-
-3. **Format & Lint**
-
-   ```bash
-   make format
-   make lint
-   ```
-
-4. **Test**
-
-   ```bash
-   pytest -v
-   ```
-
-5. **Commit** (pre-commit hooks will run)
-   ```bash
-   git add .
-   git commit -m "feat: your feature description"
-   ```
-
----
-
-## Key References
-
-- **Advances in Financial Machine Learning** (Lopez de Prado) - Purged CV, metalabeling
-- **Quantitative Trading** (Chan) - Mean reversion, momentum strategies
-- **Evidence-Based Technical Analysis** (Aronson) - Robust backtesting
-- **hmmlearn Documentation** - Gaussian HMM implementation
-- **scikit-learn Calibration** - Isotonic regression for probability calibration
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Write tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
-
----
+- *Advances in Financial Machine Learning* (Lopez de Prado) — purged CV, metalabeling
+- *Quantitative Trading* (Chan) — mean reversion, momentum strategies
+- hmmlearn documentation — Gaussian HMM implementation
+- scikit-learn calibration — isotonic regression
 
 ## License
 
-This is a starter skeleton for educational/research purposes. Adapt for your use case.
-
-**Disclaimer:** This software is for educational purposes only. Trading involves risk of loss. The authors are not responsible for any financial losses incurred.
+Educational and research purposes. Trading involves risk of loss. The authors are not responsible for any financial losses incurred.
 
 ---
 
-## Troubleshooting
-
-### Import Errors
-
-```bash
-# Ensure you're in the project root and venv is activated
-export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-```
-
-### Sample Data Not Found
-
-```bash
-# Check that sample CSVs exist
-ls samples/data/
-```
-
-### API Won't Start
-
-```bash
-# Check if port 8000 is in use
-lsof -i :8000
-# Kill process or use different port
-uvicorn api.main:app --port 8001
-```
-
-### Tests Failing
-
-```bash
-# Install test dependencies
-pip install pytest pytest-cov
-# Run with verbose output
-pytest -vv
-```
-
----
-
-## Support
-
-For issues, questions, or contributions:
-
-1. Check existing issues on GitHub
-2. Open a new issue with:
-   - Clear description
-   - Steps to reproduce
-   - Expected vs actual behavior
-   - Environment details (Python version, OS)
-
----
-
-## Roadmap
-
-**Phase 1 (Current):**
-
-- Core feature engineering
-- Label generation
-- ✅ HMM + classifier pipeline
-- ✅ Basic API
-
-**Phase 2 (Next 3 months):**
-
-- ⬜ Complete backtest engine
-- ⬜ MLflow integration
-- ⬜ Production data providers
-- ⬜ Model persistence
-- ⬜ Comprehensive testing
-
-**Phase 3 (Next 6 months):**
-
-- ⬜ Advanced features (sentiment, options)
-- ⬜ Model ensemble
-- ⬜ Real-time scoring
-- ⬜ Monitoring dashboard
-- ⬜ Automated retraining
-
-**Phase 4 (Future):**
-
-- ⬜ Multi-asset expansion
-- ⬜ Deep learning models
-- ⬜ Alternative data integration
-- ⬜ Live trading integration
-
----
-
-**Remember:** This is a skeleton. You must implement:
-
-1. Real data connectors in `etl/ingest_*.py`
-2. Model serialization in `modeling/pipeline.py`
-3. Complete backtest in `backtest/engine.py`
-4. Production deployment infrastructure
-
-**Start with the sample data, validate the approach, then integrate your real data sources.**
-
----
-
-_Built with for quantitative researchers and algo traders_
+*Built for quantitative researchers and algo traders*
