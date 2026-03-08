@@ -65,71 +65,104 @@ def compute_volatility(df: pd.DataFrame, window: int = 20) -> pd.Series:
 
 def compute_beta(df_stock: pd.DataFrame, df_benchmark: pd.DataFrame,
                  window: int = 252) -> pd.Series:
-    """Compute rolling beta vs benchmark using OLS."""
-    # Compute returns
+    """Compute rolling beta vs benchmark using vectorized rolling cov/var.
+
+    Args:
+        df_stock: Stock OHLCV data with MultiIndex [as_of_date, symbol].
+        df_benchmark: Benchmark data with DatetimeIndex and 'close' column.
+        window: Rolling window length in trading days.
+
+    Returns:
+        Series with same MultiIndex as df_stock, named 'beta_kospi_252d'.
+        NaN is expected for the first ``window`` observations of each symbol.
+    """
+    # Log returns for each stock (MultiIndex Series)
     stock_ret = df_stock.groupby(level='symbol')['close'].transform(
         lambda x: np.log(x / x.shift(1))
     )
-    
-    bench_ret = df_benchmark['close'].pct_change()
-    
-    # Align and compute rolling beta
-    result = []
+
+    # Benchmark log returns on a plain DatetimeIndex
+    bench_ret = np.log(df_benchmark['close'] / df_benchmark['close'].shift(1))
+
+    result: list[pd.Series] = []
     for symbol in df_stock.index.get_level_values('symbol').unique():
-        symbol_ret = stock_ret.loc[pd.IndexSlice[:, symbol], :]
-        
-        # Align on dates
-        aligned = pd.DataFrame({
-            'stock': symbol_ret.values,
-            'bench': bench_ret.reindex(symbol_ret.index.get_level_values('as_of_date')).values
-        })
-        
-        # Rolling OLS beta
-        def calc_beta(y, x):
-            if len(x) < 20 or x.std() == 0:
-                return np.nan
-            return np.cov(y, x)[0, 1] / np.var(x)
-        
-        rolling_beta = aligned.rolling(window).apply(
-            lambda df: calc_beta(df['stock'].values, df['bench'].values) 
-            if len(df) == window else np.nan,
-            raw=False
+        # Slicing a MultiIndex Series by a scalar key on the second level yields
+        # a plain DatetimeIndex (the symbol level is consumed).  We work in that
+        # flat space and rebuild the MultiIndex at the end.
+        sym_ret: pd.Series = stock_ret.loc[pd.IndexSlice[:, symbol]]
+        sym_dates: pd.DatetimeIndex = sym_ret.index  # plain DatetimeIndex here
+
+        # Align benchmark to this symbol's dates (NaN where no benchmark obs)
+        bench_aligned: pd.Series = bench_ret.reindex(sym_dates)
+
+        # Vectorized rolling beta = Cov(stock, bench) / Var(bench)
+        combined = pd.DataFrame(
+            {'s': sym_ret.values, 'b': bench_aligned.values},
+            index=sym_dates,
         )
-        
-        result.append(pd.Series(
-            rolling_beta['stock'].values,
-            index=symbol_ret.index,
-            name='beta_kospi_252d'
-        ))
-    
+        roll = combined.rolling(window, min_periods=max(20, window // 5))
+        rolling_cov = roll['s'].cov(combined['b'])  # Series on DatetimeIndex
+        rolling_var = roll['b'].var()
+
+        beta_vals = rolling_cov / rolling_var
+
+        # Restore the original MultiIndex so that pd.concat produces a
+        # consistent [as_of_date, symbol] MultiIndex across all symbols.
+        mi = pd.MultiIndex.from_arrays(
+            [sym_dates, [symbol] * len(sym_dates)],
+            names=['as_of_date', 'symbol'],
+        )
+        result.append(pd.Series(beta_vals.values, index=mi, name='beta_kospi_252d'))
+
     return pd.concat(result)
 
 
 def compute_idiosyncratic_vol(df: pd.DataFrame, beta_series: pd.Series,
                                df_benchmark: pd.DataFrame, window: int = 60) -> pd.Series:
-    """Compute idiosyncratic volatility (residual from market model)."""
+    """Compute idiosyncratic volatility (annualised rolling std of market-model residuals).
+
+    Args:
+        df: Stock OHLCV data with MultiIndex [as_of_date, symbol].
+        beta_series: Rolling beta Series produced by ``compute_beta``, same MultiIndex.
+        df_benchmark: Benchmark data with DatetimeIndex and 'close' column.
+        window: Rolling window for residual volatility in trading days.
+
+    Returns:
+        Series with same MultiIndex as df, named 'idio_vol_60d'.
+        NaN is expected wherever beta is NaN or during early rolling periods.
+    """
     stock_ret = df.groupby(level='symbol')['close'].transform(
         lambda x: np.log(x / x.shift(1))
     )
-    bench_ret = df_benchmark['close'].pct_change()
-    
-    result = []
+    # Log returns for benchmark on plain DatetimeIndex
+    bench_ret = np.log(df_benchmark['close'] / df_benchmark['close'].shift(1))
+
+    result: list[pd.Series] = []
     for symbol in df.index.get_level_values('symbol').unique():
-        symbol_ret = stock_ret.loc[pd.IndexSlice[:, symbol], :]
-        symbol_beta = beta_series.loc[pd.IndexSlice[:, symbol], :]
-        
-        dates = symbol_ret.index.get_level_values('as_of_date')
-        market_ret = bench_ret.reindex(dates).values
-        
-        # Residual = actual return - beta * market return
-        residuals = symbol_ret.values - symbol_beta.values * market_ret
-        residuals_series = pd.Series(residuals, index=symbol_ret.index)
-        
-        # Rolling std of residuals
-        idio_vol = residuals_series.rolling(window, min_periods=20).std() * np.sqrt(252)
-        result.append(idio_vol)
-    
-    return pd.concat(result).rename('idio_vol_60d')
+        # Scalar key slice on second level → plain DatetimeIndex (symbol consumed)
+        sym_ret: pd.Series = stock_ret.loc[pd.IndexSlice[:, symbol]]
+        sym_beta: pd.Series = beta_series.loc[pd.IndexSlice[:, symbol]]
+        sym_dates: pd.DatetimeIndex = sym_ret.index
+
+        market_ret = bench_ret.reindex(sym_dates).values
+
+        # Residual = stock return - beta * market return
+        residuals = sym_ret.values - sym_beta.values * market_ret
+        residuals_series = pd.Series(residuals, index=sym_dates)
+
+        # Rolling annualised idiosyncratic volatility
+        idio_vol_vals = (
+            residuals_series.rolling(window, min_periods=20).std() * np.sqrt(252)
+        )
+
+        # Restore MultiIndex
+        mi = pd.MultiIndex.from_arrays(
+            [sym_dates, [symbol] * len(sym_dates)],
+            names=['as_of_date', 'symbol'],
+        )
+        result.append(pd.Series(idio_vol_vals.values, index=mi, name='idio_vol_60d'))
+
+    return pd.concat(result)
 
 
 def compute_fx_features(df_fx: pd.DataFrame) -> pd.DataFrame:
@@ -200,44 +233,73 @@ def compute_turnover(df: pd.DataFrame, window: int = 20) -> pd.Series:
     return df.groupby(level='symbol')['volume'].rolling(window, min_periods=10).mean().droplevel(0).rename('turnover_20d')
 
 
-def expand_exports_with_decay(df_exports: pd.DataFrame, 
+def expand_exports_with_decay(df_exports: pd.DataFrame,
                                full_date_range: pd.DatetimeIndex,
                                half_life_days: int = 20) -> pd.DataFrame:
-    """Expand monthly export data to daily with exponential decay."""
-    # Assume exports reported monthly
-    result = []
-    
-    for category in df_exports['category'].unique():
-        cat_data = df_exports[df_exports['category'] == category].set_index('as_of_date')
-        
-        # Forward fill with exponential decay
-        daily_values = []
-        for date in full_date_range:
-            # Find most recent export value
-            past_values = cat_data[cat_data.index <= date]
-            if len(past_values) == 0:
-                daily_values.append(np.nan)
-                continue
-            
-            last_value = past_values.iloc[-1]
-            days_elapsed = (date - past_values.index[-1]).days
+    """Expand monthly export data to daily with exponential decay.
 
-            # Apply exponential decay
-            decay_factor = 0.5 ** (days_elapsed / half_life_days)
-            # Use value_usd_millions if available, otherwise yoy_change
-            value_col = 'value_usd_millions' if 'value_usd_millions' in cat_data.columns else 'yoy_change'
-            decayed_value = last_value[value_col] * decay_factor
-            
-            daily_values.append(decayed_value)
-        
-        result.append(pd.DataFrame({
-            'as_of_date': full_date_range,
-            f'exports_{category}_yoy_decay': daily_values
-        }))
-    
-    if result:
-        return pd.concat([r.set_index('as_of_date') for r in result], axis=1)
-    return pd.DataFrame()
+    Replaces the O(dates × categories) Python loop with vectorised
+    ``reindex`` + ``ffill`` followed by a vectorised decay calculation.
+
+    Args:
+        df_exports: Monthly export data with 'category', 'as_of_date', and
+            either 'value_usd_millions' or 'yoy_change' columns.
+        full_date_range: Target daily DatetimeIndex to expand into.
+        half_life_days: Half-life for the exponential decay kernel (days).
+
+    Returns:
+        DataFrame indexed by ``full_date_range`` with one column per export
+        category, named ``exports_{category}_yoy_decay``.
+        NaN where no prior observation exists for a category.
+    """
+    decay_lambda = np.log(2) / half_life_days  # so decay = exp(-lambda * days)
+
+    result_cols: dict[str, pd.Series] = {}
+
+    for category in df_exports['category'].unique():
+        cat_data = (
+            df_exports[df_exports['category'] == category]
+            .set_index('as_of_date')
+            .sort_index()
+        )
+
+        value_col = (
+            'value_usd_millions'
+            if 'value_usd_millions' in cat_data.columns
+            else 'yoy_change'
+        )
+        monthly_vals: pd.Series = cat_data[value_col]
+
+        # Step 1: reindex to full_date_range — inserts NaN on non-report days
+        daily = monthly_vals.reindex(full_date_range)
+
+        # Step 2: track the last observation date using ffill on a helper index
+        # Build a Series of "report dates" where values exist, NaN elsewhere
+        report_dates = pd.Series(
+            np.where(daily.notna(), daily.index, pd.NaT),
+            index=full_date_range,
+            dtype='datetime64[ns]',
+        )
+        # Forward-fill to carry the last report date forward
+        last_report_date = report_dates.ffill()
+
+        # Step 3: forward-fill the raw values
+        daily_ffill = daily.ffill()
+
+        # Step 4: compute days since last observation (vectorised)
+        days_elapsed = (
+            pd.Series(full_date_range, index=full_date_range) - last_report_date
+        ).dt.days.astype(float)
+
+        # Step 5: apply exponential decay: value * exp(-lambda * days_elapsed)
+        decay_factor = np.exp(-decay_lambda * days_elapsed)
+        decayed = daily_ffill * decay_factor
+
+        result_cols[f'exports_{category}_yoy_decay'] = decayed
+
+    if result_cols:
+        return pd.DataFrame(result_cols, index=full_date_range)
+    return pd.DataFrame(index=full_date_range)
 
 
 def zscore_features(df: pd.DataFrame, window_min: int = 252) -> pd.DataFrame:
@@ -308,62 +370,52 @@ def compute_features(
     # Volatility and risk
     features_list.append(compute_volatility(df_prices, window=20))
     
-    # Beta (simplified - would need proper alignment in production)
-    # beta = compute_beta(df_prices, df_benchmark, window=252)
-    # features_list.append(beta)
-    
-    # For now, create placeholder beta
-    features_list.append(pd.Series(0.0, index=df_prices.index, name='beta_kospi_252d'))
-    features_list.append(pd.Series(0.0, index=df_prices.index, name='idio_vol_60d'))
+    # Beta and idiosyncratic volatility — properly computed
+    beta = compute_beta(df_prices, df_benchmark, window=252)
+    features_list.append(beta)
+    idio_vol = compute_idiosyncratic_vol(df_prices, beta, df_benchmark, window=60)
+    features_list.append(idio_vol)
     
     # Turnover
     features_list.append(compute_turnover(df_prices, window=20))
     
     # Combine all features
     features_df = pd.concat(features_list, axis=1)
-    
-    # Broadcast scalar features to all symbols
-    dates = df_prices.index.get_level_values('as_of_date').unique()
-    
-    # FX features (broadcast to all symbols)
-    fx_feats = compute_fx_features(df_fx)
-    for col in fx_feats.columns:
-        features_df[col] = np.nan
-        for date in dates:
-            if date in fx_feats.index:
-                features_df.loc[pd.IndexSlice[date, :], col] = fx_feats.loc[date, col]
-    
-    # Memory features (broadcast to all symbols)
-    mem_feats = compute_memory_features(df_memory)
-    for col in mem_feats.columns:
-        features_df[col] = np.nan
-        for date in dates:
-            if date in mem_feats.index:
-                features_df.loc[pd.IndexSlice[date, :], col] = mem_feats.loc[date, col]
-    
-    # SOX features (broadcast to all symbols)
-    sox_feats = compute_sox_features(df_sox)
-    for col in sox_feats.columns:
-        features_df[col] = np.nan
-        for date in dates:
-            if date in sox_feats.index:
-                features_df.loc[pd.IndexSlice[date, :], col] = sox_feats.loc[date, col]
-    
-    # Flow features
+
+    # ------------------------------------------------------------------
+    # Broadcast scalar (date-level) features to all symbols using
+    # vectorised reindex on the date level of the MultiIndex.
+    # Pattern: map each row's date → scalar value in one pass, avoiding
+    # any Python-level date iteration.
+    # ------------------------------------------------------------------
+    row_dates: pd.Index = features_df.index.get_level_values('as_of_date')
+    dates: pd.Index = row_dates.unique()
+
+    def _broadcast(scalar_df: pd.DataFrame) -> None:
+        """Assign each column of scalar_df to features_df via date reindex."""
+        for col in scalar_df.columns:
+            features_df[col] = scalar_df[col].reindex(row_dates).values
+
+    # FX features
+    _broadcast(compute_fx_features(df_fx))
+
+    # Memory features
+    _broadcast(compute_memory_features(df_memory))
+
+    # SOX features
+    _broadcast(compute_sox_features(df_sox))
+
+    # Flow features (already MultiIndex — use join)
     flow_feats = compute_flow_features(df_flows, df_prices)
     features_df = features_df.join(flow_feats, how='left')
-    
-    # Export features with decay (broadcast to all symbols)
+
+    # Export features with decay (date-level → broadcast)
     export_feats = expand_exports_with_decay(
-        df_exports, 
+        df_exports,
         pd.DatetimeIndex(dates),
-        half_life_days=exports_decay_half_life
+        half_life_days=exports_decay_half_life,
     )
-    for col in export_feats.columns:
-        features_df[col] = np.nan
-        for date in dates:
-            if date in export_feats.index:
-                features_df.loc[pd.IndexSlice[date, :], col] = export_feats.loc[date, col]
+    _broadcast(export_feats)
     
     # Z-score all features
     features_df = zscore_features(features_df, window_min=zscore_window_min)
