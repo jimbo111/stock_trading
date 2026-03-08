@@ -4,6 +4,7 @@ from __future__ import annotations
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.isotonic import IsotonicRegression
+from sklearn.preprocessing import StandardScaler
 
 
 class EnetClassifier:
@@ -31,6 +32,7 @@ class EnetClassifier:
             n_jobs=-1,
             random_state=42
         )
+        self.scaler = StandardScaler()
         self.cal = None
         self.fitted = False
     
@@ -56,12 +58,18 @@ class EnetClassifier:
         mask = ~np.isnan(X).any(axis=1) & ~np.isnan(y)
         X_clean = X[mask]
         y_clean = y[mask]
-        
+
         if len(X_clean) == 0:
             raise ValueError("No valid samples after removing NaN")
-        
+
+        # Fit scaler on clean training data and standardize
+        # L1/L2 regularization is scale-sensitive; without this, z-scored
+        # features (std≈1) and HMM state probabilities (range 0-1) are
+        # penalized disproportionately.
+        X_scaled = self.scaler.fit_transform(X_clean)
+
         # Fit classifier
-        self.clf.fit(X_clean, y_clean)
+        self.clf.fit(X_scaled, y_clean)
         self.fitted = True
         
         # Fit calibrator if OOF data provided
@@ -92,12 +100,15 @@ class EnetClassifier:
         # Handle NaN rows
         mask = ~np.isnan(X).any(axis=1)
         probs = np.full(len(X), np.nan)
-        
+
         if mask.sum() == 0:
             return probs
-        
+
+        # Apply the same scaling fitted during training
+        X_scaled = self.scaler.transform(X[mask])
+
         # Get raw scores
-        raw = self.clf.decision_function(X[mask])
+        raw = self.clf.decision_function(X_scaled)
         
         # Apply calibration if available
         if self.cal is not None:
