@@ -123,8 +123,17 @@ def fit_pipeline(
     if len(df_train) < 50:
         raise ValueError(f"Insufficient training samples after HMM filtering: {len(df_train)}")
 
-    # Fill NaN values with 0 for features (conservative approach)
-    X = df_train[feature_cols].fillna(0).values
+    # Fill NaN values with semantically correct defaults:
+    #   - z-scored features: 0 means "no signal" (average), acceptable
+    #   - state probabilities: 1/n_states means "unknown regime" (uniform prior)
+    n_states = config['hmm']['n_states']
+    state_prob_cols = [f'state_prob_{i}' for i in range(n_states)]
+    zscore_feat_cols = [c for c in feature_cols if c not in state_prob_cols]
+
+    df_X = df_train[feature_cols].copy()
+    df_X[zscore_feat_cols] = df_X[zscore_feat_cols].fillna(0)
+    df_X[state_prob_cols] = df_X[state_prob_cols].fillna(1.0 / n_states)
+    X = df_X.values
     y = df_train['y_class'].values
 
     # Purged K-Fold cross-validation for OOF scores
@@ -144,16 +153,22 @@ def fit_pipeline(
         X_train, X_val = X[train_idx], X[val_idx]
         y_train = y[train_idx]
 
-        # Fit fold classifier
-        fold_clf = EnetClassifier(C=1.0, l1_ratio=0.3)
+        # Fit fold classifier — use hyperparameters from config
+        fold_clf = EnetClassifier(
+            C=config['model']['C'],
+            l1_ratio=config['model']['l1_ratio']
+        )
         fold_clf.fit(X_train, y_train)
 
         # Predict on validation
         oof_scores[val_idx] = fold_clf.predict_proba(X_val)
     
-    # Fit final classifier with calibration
+    # Fit final classifier with calibration — use hyperparameters from config
     logger.info("Fitting final classifier with isotonic calibration")
-    clf = EnetClassifier(C=1.0, l1_ratio=0.3)
+    clf = EnetClassifier(
+        C=config['model']['C'],
+        l1_ratio=config['model']['l1_ratio']
+    )
     clf.fit(X, y, oof_scores=oof_scores, oof_y=oof_y)
     
     # Log feature importance
@@ -212,8 +227,17 @@ def score_pipeline(
     for i in range(n_states):
         df_with_states[f'state_prob_{i}'] = results[f'state_prob_{i}']
 
-    # Fill NaN with 0 and predict
-    X = df_with_states[art.feature_columns].fillna(0).values
+    # Fill NaN with semantically correct defaults (same logic as fit_pipeline):
+    #   - z-scored features: 0 means "no signal" (average)
+    #   - state probabilities: 1/n_states means "unknown regime" (uniform prior)
+    state_prob_cols_set = {f'state_prob_{i}' for i in range(n_states)}
+    zscore_cols = [c for c in art.feature_columns if c not in state_prob_cols_set]
+    sp_cols = [c for c in art.feature_columns if c in state_prob_cols_set]
+
+    df_score = df_with_states[art.feature_columns].copy()
+    df_score[zscore_cols] = df_score[zscore_cols].fillna(0)
+    df_score[sp_cols] = df_score[sp_cols].fillna(1.0 / n_states)
+    X = df_score.values
     p_up = art.clf.predict_proba(X)
 
     results['p_up'] = p_up
@@ -333,14 +357,23 @@ def main():
             vol20_ann_raw = row.get('vol20_ann', 0.015)
             vol20_ann = float(vol20_ann_raw) if not pd.isna(vol20_ann_raw) else 0.015
 
-            # Simple position sizing: inverse volatility scaling
-            base_weight = 0.10  # 10% base allocation
-            weight_suggested = base_weight * (0.015 / max(vol20_ann, 0.001))
-            weight_suggested = min(weight_suggested, 0.20)  # Cap at 20%
+            p_up = float(row['p_up'])
+
+            # Kelly-fractional position sizing, scaled by inverse volatility.
+            # f* = kelly_frac * (p - (1-p)) / 1  where p = p_up
+            # Then scale by (vol_target / realized_vol) to be vol-neutral.
+            # Cap at config weight_max.
+            kelly_frac = config.get('kelly_frac', 0.25)
+            weight_max = config.get('weight_max', 0.05)
+            vol_target = 0.015  # ~1.5% daily vol target (annualised ~24%)
+            kelly_raw = kelly_frac * (p_up - (1.0 - p_up))  # edge fraction
+            # Inverse-vol scaling: reduce size when realized vol is high
+            vol_scale = vol_target / max(vol20_ann, 0.001)
+            weight_suggested = kelly_raw * vol_scale
+            # Clip: no short signals from this model (weight >= 0), cap at max
+            weight_suggested = float(np.clip(weight_suggested, 0.0, weight_max))
 
             # Estimate expected excess return in bps
-            # Rough heuristic: p_up maps to expected return
-            p_up = float(row['p_up'])
             er20_hat_bps = (p_up - 0.5) * 200  # ±100 bps for ±50% prob
 
             predictions.append({
