@@ -51,17 +51,18 @@ def make_excess_return_labels(
         benchmark_returns = pd.Series(0.0, index=df_prices.index.get_level_values('as_of_date').unique())
     else:
         benchmark_prices = df_prices.loc[pd.IndexSlice[:, benchmark_symbol], benchmark_col]
-        benchmark_returns = benchmark_prices.pct_change(horizon_days).shift(-horizon_days)
+        # Log forward return: log(price_{t+h} / price_t) using shift(-h) to bring future price to t
+        benchmark_returns = np.log(benchmark_prices.shift(-horizon_days) / benchmark_prices)
         benchmark_returns.index = benchmark_returns.index.get_level_values('as_of_date')
-    
+
     for symbol in symbols:
         logger.debug(f"Processing labels for {symbol}")
-        
+
         # Get stock prices
         stock_prices = df_prices.loc[pd.IndexSlice[:, symbol], benchmark_col]
-        
-        # Compute forward returns
-        forward_returns = stock_prices.pct_change(horizon_days).shift(-horizon_days)
+
+        # Log forward return: log(price_{t+h} / price_t), consistent with log-return features
+        forward_returns = np.log(stock_prices.shift(-horizon_days) / stock_prices)
         
         # Get dates for this symbol
         dates = stock_prices.index.get_level_values('as_of_date')
