@@ -117,8 +117,8 @@ def list_predictions(
             predictions = pred_store.read_json(as_of_date)
         else:
             predictions = pred_store.latest_json()
-            as_of_date = predictions[0]['as_of_date'] if predictions else "unknown"
-        
+            as_of_date = predictions[0]['as_of_date'] if len(predictions) > 0 else "unknown"
+
         return PredictionListResponse(
             predictions=[Prediction(**p) for p in predictions],
             count=len(predictions),

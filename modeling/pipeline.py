@@ -324,10 +324,14 @@ def main():
         for (as_of_date, symbol), row in results_df.iterrows():
             # Extract state probabilities
             n_states = config['hmm']['n_states']
-            state_probs = [float(row.get(f'state_prob_{i}', 0.0)) for i in range(n_states)]
+            state_probs = [
+                float(row.get(f'state_prob_{i}', 0.0)) if not pd.isna(row.get(f'state_prob_{i}', 0.0)) else 0.0
+                for i in range(n_states)
+            ]
 
             # Get volatility for position sizing
-            vol20_ann = float(row.get('vol20_ann', 0.015))
+            vol20_ann_raw = row.get('vol20_ann', 0.015)
+            vol20_ann = float(vol20_ann_raw) if not pd.isna(vol20_ann_raw) else 0.015
 
             # Simple position sizing: inverse volatility scaling
             base_weight = 0.10  # 10% base allocation

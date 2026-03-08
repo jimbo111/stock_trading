@@ -251,7 +251,7 @@ function app() {
                         <td><strong>${pred.symbol}</strong></td>
                         <td>${pred.as_of_date}</td>
                         <td>${pUp}%</td>
-                        <td>${pred.er20_hat_bps.toFixed(1)}</td>
+                        <td>${(pred.er20_hat_bps || 0).toFixed(1)}</td>
                         <td><small>${stateProbs}</small></td>
                         <td>${vol}%</td>
                         <td>${weight}%</td>
